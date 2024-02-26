@@ -1,0 +1,55 @@
+<mxfile host="app.diagrams.net" modified="2024-02-22T12:17:08.443Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36" etag="qtV8H1lLqchfjuCxRvX-" version="23.1.5" type="device">
+  <diagram name="Page-1" id="PC4z9zPj6Z1fhGx3IYxd">
+    <mxGraphModel dx="2634" dy="422" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-2" value="" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;fontSize=12;startSize=8;endSize=8;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-1080" y="640" as="sourcePoint" />
+            <mxPoint x="-920" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-3" value="Data (ESP now)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="-1080" y="590" width="140" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-4" value="&lt;font style=&quot;font-size: 21px;&quot;&gt;USB&lt;/font&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="-920" y="600" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-5" value="" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;fontSize=12;startSize=8;endSize=8;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="DwpIRpVP7rjnvAxf3a41-4" target="DwpIRpVP7rjnvAxf3a41-6">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-760" y="640" as="sourcePoint" />
+            <mxPoint x="-760" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-6" value="&lt;span style=&quot;font-size: 21px;&quot;&gt;CPU&lt;/span&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="-700" y="600" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-7" value="Reading input" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="-830" y="590" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-10" value="Notes:&lt;br&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;ul&gt;&lt;li&gt;&lt;span style=&quot;background-color: initial;&quot;&gt;Logger will always create a single file from it&#39;s lifetime run&lt;/span&gt;&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="-990" y="700" width="470" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-11" value="&lt;span style=&quot;font-size: 21px;&quot;&gt;File&lt;/span&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="-480" y="600" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-12" value="Write out" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="-600" y="590" width="90" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-13" value="" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;fontSize=12;startSize=8;endSize=8;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-620" y="639.5" as="sourcePoint" />
+            <mxPoint x="-480" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-15" value="Data Logger" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=32;" vertex="1" parent="1">
+          <mxGeometry x="-855" y="500" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="DwpIRpVP7rjnvAxf3a41-17" value="Options:&lt;br&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;ul&gt;&lt;li&gt;-o, --output - Specify the output path (check if overwriting)&lt;/li&gt;&lt;li&gt;-n, --note - Add a note to the log file about the experiment setup&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="-1010" y="790" width="510" height="100" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
