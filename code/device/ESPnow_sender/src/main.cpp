@@ -1,26 +1,62 @@
 #include <Arduino.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include <main.h>
 
 
-// C8:F0:9E:9B:32:04
+uint32_t * messagesLost = 0;
 
-// REPLACE WITH YOUR RECEIVER MAC Address
-uint8_t broadcastAddress[] = {0xC8, 0xF0, 0x9E, 0x9B, 0x32, 0x04};
-
-// Structure example to send data
-// Must match the receiver structure
-typedef struct struct_message {
-  char a[32];
-  int b;
-  float c;
-  bool d;
-} struct_message;
-
-// Create a struct_message called myData
-struct_message myData;
+uint8_t broadcastAddress[] = MAC_ADDRESS;
 
 esp_now_peer_info_t peerInfo;
+
+// This function creates telemetryMessage struct 
+struct telemetryMessage * readTelemetry(){
+  struct telemetryMessage * dataEntry;
+  dataEntry->relativeTime = micros();
+  return dataEntry;
+}
+
+// This will add data message to the array, eventually deleting oldest entry
+int * pushMessage(telemetryMessage * message){
+  int i = 0;
+  // Here it just looks for empty space
+  for (i = 0; i < BUFFER_CAPACITY; i++){
+    if (telemetryArray[i] == NULL){
+      telemetryArray[i] = message;
+      return 0;
+    }
+  }
+  // Now if no empty space found, we have to delete the oldest msg
+  int tmpID = 0;
+  uint64_t min_time = telemetryArray[i]->relativeTime;
+  for (i = 1; i < BUFFER_CAPACITY; i++){
+    if (telemetryArray[i]->relativeTime < min_time){
+      min_time = telemetryArray[i]->relativeTime;
+      tmpID = i;
+    }
+  }
+  telemetryArray[tmpID] = message;
+  return (int *) 1;
+}
+
+// This sends a sinlge message, returns the send method return value
+// (success = 0, fail = 1) for further fail detection
+int * sendMessage(struct telemetryMessage * message){
+  return 0;
+}
+
+// Goes through the array of structs and trys to send all the structs, one after the other
+// Reads the sendMessage output, and if succeeded, remove the entry from the array
+void sendMessages(){
+  for (int i = 0; i < BUFFER_CAPACITY; i++){
+    if (telemetryArray[i] != NULL){
+      if (sendMessage(telemetryArray[i])){
+        telemetryArray[i] = NULL;
+      }
+    }
+  }
+}
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -58,22 +94,35 @@ void setup() {
 }
 
 void loop() {
-  // Set values to send
-  strcpy(myData.a, "THIS IS A CHAR");
-  myData.b = random(1,20);
-  myData.c = 1.2;
-  myData.d = false;
+  // Read telemetry struct and put it into first free array slot
+  // Conflists will yet have to be solved, maybe "least recently used"
 
-  esp_now_peer_info()
+  // strPWDcpy(myData.a, "THIS IS A CHAR");
+  // myData.b = random(1,20);
+  // myData.c = 1.2;
+  // myData.d = false;
+
+
+  // Here we just add the telemetry to the array
+  // And increment messageLost in case of deleting old message (unsent)
+  telemetryMessage * dato = readTelemetry();
+  int * rv = pushMessage(dato);
+  messagesLost += (uint32_t)*rv;
+
+
+  esp_now_peer_info();
   
-  // Send message via ESP-NOW
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
+  sendMessages(); // The logic below will be in send Message
+  // Then it will be called in loop in function sendMessages
+
+  // // Send message via ESP-NOW
+  // esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
    
-  if (result == ESP_OK) {
-    Serial.println("Sent with success");
-  }
-  else {
-    Serial.println("Error sending the data");
-  }
-  delay(2000);
+  // if (result == ESP_OK) {
+  //   Serial.println("Sent with success");
+  // }
+  // else {
+  //   Serial.println("Error sending the data");
+  // }
+  // delay(2000);
 }
