@@ -1,37 +1,47 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <main.h>
+
+#define SEMICOLON Serial.print(';');
+#define NEWLINE Serial.println();
 
 // MAC Address of the ESP32 devboard (cap on enable pin): 24:6F:28:25:E4:90
 // MAC Address of the ESP32 devboard: C8:F0:9E:9B:32:04
 // MAC Address of the ESP32 LoRa Board: 50:02:91:8A:F7:40
 
-// Structure example to receive data
-// Must match the sender structure
-typedef struct struct_message {
-    char a[32];
-    int b;
-    float c;
-    bool d;
-} struct_message;
-
 // Create a struct_message called myData
-struct_message myData;
+telemetryMessage * currentStructure = (telemetryMessage *) malloc(sizeof(telemetryMessage));
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  memcpy(&myData, incomingData, sizeof(myData));
-  Serial.print("Bytes received: ");
-  Serial.println(len);
-  Serial.print("Char: ");
-  Serial.println(myData.a);
-  Serial.print("Int: ");
-  Serial.println(myData.b);
-  Serial.print("Float: ");
-  Serial.println(myData.c);
-  Serial.print("Bool: ");
-  Serial.println(myData.d);
-  Serial.println();
+  memcpy(currentStructure, incomingData, sizeof(telemetryMessage));
+  // Write the structure out as a CSV line
+  Serial.print(currentStructure->relativeTime); SEMICOLON
+  Serial.print(currentStructure->gyroscope[0]); SEMICOLON
+  Serial.print(currentStructure->gyroscope[1]); SEMICOLON
+  Serial.print(currentStructure->gyroscope[2]); SEMICOLON
+  Serial.print(currentStructure->accelerometer[0]); SEMICOLON
+  Serial.print(currentStructure->accelerometer[1]); SEMICOLON
+  Serial.print(currentStructure->accelerometer[2]); SEMICOLON
+  Serial.print(currentStructure->barometer); SEMICOLON
+  Serial.print(currentStructure->thermometer); SEMICOLON
+  Serial.print(currentStructure->thermometer_stupido); SEMICOLON
+  Serial.print(currentStructure->voltage); NEWLINE
+}
+
+void SendHeader(){
+  Serial.print("Timestamp"); SEMICOLON
+  Serial.print("GyroscopeX"); SEMICOLON
+  Serial.print("GyroscopeY"); SEMICOLON
+  Serial.print("GyroscopeZ"); SEMICOLON
+  Serial.print("AccelerometerX"); SEMICOLON
+  Serial.print("AccelerometerY"); SEMICOLON
+  Serial.print("AccelerometerZ"); SEMICOLON
+  Serial.print("Barometer"); SEMICOLON
+  Serial.print("Thermometer"); SEMICOLON
+  Serial.print("ThermometerStupido"); SEMICOLON
+  Serial.print("Voltage"); NEWLINE
 }
 
 void setup() {
@@ -52,6 +62,7 @@ void setup() {
     return;
   }
 
+  SendHeader();
   // Once ESPNow is successfully Init, we will register for recv CB to
   // get recv packer info
   esp_now_register_recv_cb(OnDataRecv);
