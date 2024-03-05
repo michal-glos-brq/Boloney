@@ -14,6 +14,17 @@ esp_now_peer_info_t peerInfo;
 struct telemetryMessage * readTelemetry(){
   struct telemetryMessage * dataEntry;
   dataEntry->relativeTime = micros();
+  // Mockity mock
+  dataEntry->accelerometer[0] = 1;
+  dataEntry->accelerometer[1] = 2;
+  dataEntry->accelerometer[2] = 3;
+  dataEntry->gyroscope[0] = 4;
+  dataEntry->gyroscope[1] = 5;
+  dataEntry->gyroscope[2] = 6;
+  dataEntry->barometer = 7;
+  dataEntry->thermometer = 8.0;
+  dataEntry->thermometer_stupido = 9.0;
+  dataEntry->voltage = 10.0;
   return dataEntry;
 }
 
@@ -74,7 +85,7 @@ void setup() {
   // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
-    return;
+    return (void) 1;
   }
 
   // Once ESPNow is successfully Init, we will register for Send CB to
@@ -89,7 +100,7 @@ void setup() {
   // Add peer        
   if (esp_now_add_peer(&peerInfo) != ESP_OK){
     Serial.println("Failed to add peer");
-    return;
+    return (void) 1;
   }
 }
 
