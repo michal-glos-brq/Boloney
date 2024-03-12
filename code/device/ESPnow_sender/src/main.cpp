@@ -4,8 +4,6 @@
 #include <main.h>
 
 
-uint32_t * messagesLost = 0;
-
 uint8_t broadcastAddress[] = MAC_ADDRESS;
 
 esp_now_peer_info_t peerInfo;
@@ -29,7 +27,7 @@ struct telemetryMessage * readTelemetry(){
 }
 
 // This will add data message to the array, eventually deleting oldest entry
-int * pushMessage(telemetryMessage * message){
+int pushMessage(telemetryMessage * message){
   int i = 0;
   // Here it just looks for empty space
   for (i = 0; i < BUFFER_CAPACITY; i++){
@@ -48,13 +46,13 @@ int * pushMessage(telemetryMessage * message){
     }
   }
   telemetryArray[tmpID] = message;
-  return (int *) 1;
+  return 1;
 }
 
 // This sends a sinlge message, returns the send method return value
 // (success = 0, fail = 1) for further fail detection
-int * sendMessage(struct telemetryMessage * message){
-  return 0;
+int sendMessage(struct telemetryMessage * message){
+  return esp_now_send(broadcastAddress, (uint8_t *) message, sizeof(telemetryMessage));
 }
 
 // Goes through the array of structs and trys to send all the structs, one after the other
@@ -117,12 +115,8 @@ void loop() {
   // Here we just add the telemetry to the array
   // And increment messageLost in case of deleting old message (unsent)
   telemetryMessage * dato = readTelemetry();
-  int * rv = pushMessage(dato);
-  messagesLost += (uint32_t)*rv;
-
-
+  pushMessage(dato);
   esp_now_peer_info();
-  
   sendMessages(); // The logic below will be in send Message
   // Then it will be called in loop in function sendMessages
 
