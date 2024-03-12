@@ -17,8 +17,8 @@ public:
     };
 
     MPU6050();
-    void begin();
-    void read();
+    bool begin();
+    bool read();
     void printData();
     struct_raw_MPU getRawData();
 

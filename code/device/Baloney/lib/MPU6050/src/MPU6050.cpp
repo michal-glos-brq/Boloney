@@ -2,16 +2,17 @@
 
 MPU6050::MPU6050() {}
 
-void MPU6050::begin() {
+bool MPU6050::begin() {
     Wire.begin();
     Wire.beginTransmission(MPU_addr);
     Wire.write(0x6B);
     Wire.write(0);
     Wire.endTransmission(true);
     Serial.begin(115200);
+    return true;
 }
 
-void MPU6050::read() {
+bool MPU6050::read() {
     Wire.beginTransmission(MPU_addr);
     Wire.write(0x3B);
     Wire.endTransmission(false);
@@ -24,7 +25,7 @@ void MPU6050::read() {
     rawImuData.GyY=Wire.read()<<8|Wire.read();
     rawImuData.GyZ=Wire.read()<<8|Wire.read();
     Wire.endTransmission(true);
-    delay(500);
+    return true;
 }
 
 void MPU6050::printData() {
