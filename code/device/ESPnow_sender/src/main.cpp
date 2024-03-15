@@ -9,16 +9,17 @@ uint8_t broadcastAddress[] = MAC_ADDRESS;
 esp_now_peer_info_t peerInfo;
 
 // This function creates telemetryMessage struct 
-struct telemetryMessage * readTelemetry(){
-  struct telemetryMessage * dataEntry;
+telemetryMessage * readTelemetry(){
+  telemetryMessage * dataEntry = (telemetryMessage *)malloc(sizeof(telemetryMessage));
   dataEntry->relativeTime = micros();
   // Mockity mock
-  dataEntry->accelerometer[0] = 1;
-  dataEntry->accelerometer[1] = 2;
-  dataEntry->accelerometer[2] = 3;
-  dataEntry->gyroscope[0] = 4;
-  dataEntry->gyroscope[1] = 5;
-  dataEntry->gyroscope[2] = 6;
+  dataEntry->valid = true;
+  dataEntry->accelerometerX = 1;
+  dataEntry->accelerometerY = 2;
+  dataEntry->accelerometerZ = 3;
+  dataEntry->gyroscopeX = 4;
+  dataEntry->gyroscopeY = 5;
+  dataEntry->gyroscopeZ = 6;
   dataEntry->barometer = 7;
   dataEntry->thermometer = 8.0;
   dataEntry->thermometer_stupido = 9.0;
@@ -28,40 +29,50 @@ struct telemetryMessage * readTelemetry(){
 
 // This will add data message to the array, eventually deleting oldest entry
 int pushMessage(telemetryMessage * message){
-  int i = 0;
+  int i;
   // Here it just looks for empty space
   for (i = 0; i < BUFFER_CAPACITY; i++){
-    if (telemetryArray[i] == NULL){
-      telemetryArray[i] = message;
+    if (!(telemetryArray[i].valid)){
+      telemetryArray[i] = *message;
       return 0;
     }
   }
+
   // Now if no empty space found, we have to delete the oldest msg
+  // Assuming all are valid ...
   int tmpID = 0;
-  uint64_t min_time = telemetryArray[i]->relativeTime;
+  uint64_t min_time = telemetryArray[i].relativeTime;
   for (i = 1; i < BUFFER_CAPACITY; i++){
-    if (telemetryArray[i]->relativeTime < min_time){
-      min_time = telemetryArray[i]->relativeTime;
+    if (telemetryArray[i].relativeTime < min_time){
+      min_time = telemetryArray[i].relativeTime;
       tmpID = i;
     }
   }
-  telemetryArray[tmpID] = message;
+  telemetryArray[tmpID] = *message;
   return 1;
 }
 
 // This sends a sinlge message, returns the send method return value
 // (success = 0, fail = 1) for further fail detection
 int sendMessage(struct telemetryMessage * message){
-  return esp_now_send(broadcastAddress, (uint8_t *) message, sizeof(telemetryMessage));
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) message, sizeof(telemetryMessage));
+     
+  if (result == ESP_OK) {
+    return 0;
+  }
+  else
+  {
+    return 1;
+  }
 }
 
 // Goes through the array of structs and trys to send all the structs, one after the other
 // Reads the sendMessage output, and if succeeded, remove the entry from the array
 void sendMessages(){
   for (int i = 0; i < BUFFER_CAPACITY; i++){
-    if (telemetryArray[i] != NULL){
-      if (sendMessage(telemetryArray[i])){
-        telemetryArray[i] = NULL;
+    if (telemetryArray[i].valid){
+      if (sendMessage(&(telemetryArray[i])) == 0){
+        telemetryArray[i].valid = false;
       }
     }
   }
@@ -84,6 +95,13 @@ void setup() {
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
     return (void) 1;
+  }
+
+  telemetryArray = (telemetryMessage *)malloc(BUFFER_CAPACITY * sizeof(telemetryMessage));
+
+  // Set all entries from array to NULLs
+  for (int i = 0; i < BUFFER_CAPACITY; i++){
+    telemetryArray->valid = false;
   }
 
   // Once ESPNow is successfully Init, we will register for Send CB to
@@ -114,9 +132,14 @@ void loop() {
 
   // Here we just add the telemetry to the array
   // And increment messageLost in case of deleting old message (unsent)
+  
+  
   telemetryMessage * dato = readTelemetry();
+
   pushMessage(dato);
+
   esp_now_peer_info();
+
   sendMessages(); // The logic below will be in send Message
   // Then it will be called in loop in function sendMessages
 

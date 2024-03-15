@@ -11,23 +11,23 @@
 // MAC Address of the ESP32 LoRa Board: 50:02:91:8A:F7:40
 
 // Create a struct_message called myData
-telemetryMessage * currentStructure = (telemetryMessage *) malloc(sizeof(telemetryMessage));
+telemetryMessage currentStructure;
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  memcpy(currentStructure, incomingData, sizeof(telemetryMessage));
+  memcpy(&currentStructure, incomingData, sizeof(telemetryMessage));
   // Write the structure out as a CSV line
-  Serial.print(currentStructure->relativeTime); SEMICOLON
-  Serial.print(currentStructure->gyroscope[0]); SEMICOLON
-  Serial.print(currentStructure->gyroscope[1]); SEMICOLON
-  Serial.print(currentStructure->gyroscope[2]); SEMICOLON
-  Serial.print(currentStructure->accelerometer[0]); SEMICOLON
-  Serial.print(currentStructure->accelerometer[1]); SEMICOLON
-  Serial.print(currentStructure->accelerometer[2]); SEMICOLON
-  Serial.print(currentStructure->barometer); SEMICOLON
-  Serial.print(currentStructure->thermometer); SEMICOLON
-  Serial.print(currentStructure->thermometer_stupido); SEMICOLON
-  Serial.print(currentStructure->voltage); NEWLINE
+  Serial.print(currentStructure.relativeTime); SEMICOLON
+  Serial.print(currentStructure.gyroscopeX); SEMICOLON
+  Serial.print(currentStructure.gyroscopeY); SEMICOLON
+  Serial.print(currentStructure.gyroscopeZ); SEMICOLON
+  Serial.print(currentStructure.accelerometerX); SEMICOLON
+  Serial.print(currentStructure.accelerometerY); SEMICOLON
+  Serial.print(currentStructure.accelerometerZ); SEMICOLON
+  Serial.print(currentStructure.barometer); SEMICOLON
+  Serial.print(currentStructure.thermometer); SEMICOLON
+  Serial.print(currentStructure.thermometer_stupido); SEMICOLON
+  Serial.print(currentStructure.voltage); NEWLINE
 }
 
 void SendHeader(){

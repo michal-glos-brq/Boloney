@@ -16,9 +16,14 @@
 // Must match the receiver structure
 typedef struct telemetryMessage {
     // Relative time will be kept, absolute time will be noted roughly
+    bool valid;
     uint64_t relativeTime;
-    int gyroscope[3];
-    int accelerometer[3];
+    int gyroscopeX;
+    int gyroscopeY;
+    int gyroscopeZ;
+    int accelerometerX;
+    int accelerometerY;
+    int accelerometerZ;
     int barometer;
     float thermometer;
     float thermometer_stupido;
@@ -29,7 +34,7 @@ typedef struct telemetryMessage {
 // For simplicity, for now, let's define it as an array full of NULLs
 // So we could check easily the whole array for some data present
 // If you do not understand, please write me, i promise - it makes sense :D
-struct telemetryMessage * telemetryArray[BUFFER_CAPACITY];
+struct telemetryMessage * telemetryArray;
 
 
 /*#################*/
