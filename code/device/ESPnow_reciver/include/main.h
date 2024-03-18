@@ -1,3 +1,6 @@
+#ifndef MAIN_H
+#define MAIN_H
+
 #include <esp_now.h>
 
 // C8:F0:9E:9B:32:04 (not sure about this comment)
@@ -9,8 +12,8 @@ typedef struct telemetryMessage {
     uint64_t relativeTime;
     uint64_t id;
     int valid;
-    int gyroscope[3];
-    int accelerometer[3];
+    long gyroscope[3];
+    long accelerometer[3];
     int barometer;
     float thermometer;
     float thermometer_stupido;
@@ -22,3 +25,6 @@ esp_now_peer_info_t peerInfo;
 
 struct telemetryMessage currentTelemetry;
 telemetryMessage * telemetryArray;
+
+
+#endif

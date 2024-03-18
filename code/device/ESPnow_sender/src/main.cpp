@@ -13,8 +13,19 @@
 
 
 // Mutex for concurrent stack access
-std::mutex mtx_stack, mtx_struct;
+std::mutex mtx_stack, mtx_struct, mtx_sensor_acc;
 
+typedef struct sensorACC {
+  // We will actually have to integrate ... sp basically:
+    // gyroscope is orientation in space (apprx.)
+    // accelerometer (with comnination of gyroscope) is position
+  double gyroscope[3];
+  double accelerometer[3];
+  // Last timestep - neccessary for integration
+  uint64_t microseconds;
+} sensorACC;
+
+sensorACC acc;
 
 uint8_t broadcastAddress[] = MAC_ADDRESS_RCV;
 
@@ -33,13 +44,13 @@ void readTelemetry(){
   currentTelemetry.relativeTime = micros();
   currentTelemetry.id = id_counter++;
   currentTelemetry.valid = 1;
+  // Transfer integrated data from acc and gyro
+  mtx_sensor_acc.lock();
+  memcpy(currentTelemetry.accelerometer, acc.accelerometer, 3 * sizeof(long));
+  memcpy(currentTelemetry.gyroscope, acc.gyroscope, 3 * sizeof(long));
+  mtx_sensor_acc.unlock();
+
   // Mockity mock
-  currentTelemetry.accelerometer[0] = 1;
-  currentTelemetry.accelerometer[1] = 2;
-  currentTelemetry.accelerometer[2] = 3;
-  currentTelemetry.gyroscope[0] = 4;
-  currentTelemetry.gyroscope[1] = 5;
-  currentTelemetry.gyroscope[2] = 6;
   currentTelemetry.barometer = 7;
   currentTelemetry.thermometer = 8.0;
   currentTelemetry.thermometer_stupido = 9.0;
@@ -94,6 +105,19 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 }
 
+void setupReading() {
+  // Setup the sensory integrators and the RTOS job
+  mtx_sensor_acc.lock();
+  acc.microseconds = micros();
+  // Position set to [0, 0, 0]
+  acc.accelerometer[0] = 0.; acc.accelerometer[1] = 0.; acc.accelerometer[2] = 0.;
+  // Orientation set to [0, 0, -1] - which is basically down in Z direction
+  acc.gyroscope[0] = 0.; acc.gyroscope[1] = 0.; acc.gyroscope[2] = -1.;
+  mtx_sensor_acc.unlock();
+
+  // TODO: Add RTOS task
+}
+
 void setup() {
 
   mtx_stack.lock();
@@ -130,6 +154,8 @@ void setup() {
 
   telemetryArray = (telemetryMessage *) calloc(BUFFER_CAPACITY, sizeof(telemetryMessage));
   currentTelemetry.valid = 0;
+
+  setupReading();
 
   for (int i = 0; i < BUFFER_CAPACITY; i++) {
     telemetryArray[i].valid = 0;
