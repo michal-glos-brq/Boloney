@@ -3,8 +3,8 @@
 #include <esp_now.h>
 #include <main.h>
 
-#define SEMICOLON Serial.print(';');
-#define NEWLINE Serial.println();
+uint8_t broadcastAddress[] = MAC_ADDRESS_SND;
+
 
 // MAC Address of the ESP32 devboard (cap on enable pin): 24:6F:28:25:E4:90
 // MAC Address of the ESP32 devboard: C8:F0:9E:9B:32:04
@@ -12,36 +12,47 @@
 
 // Create a struct_message called myData
 telemetryMessage currentStructure;
+telemetryAck ack;
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&currentStructure, incomingData, sizeof(telemetryMessage));
-  // Write the structure out as a CSV line
-  Serial.print(currentStructure.relativeTime); SEMICOLON
-  Serial.print(currentStructure.gyroscopeX); SEMICOLON
-  Serial.print(currentStructure.gyroscopeY); SEMICOLON
-  Serial.print(currentStructure.gyroscopeZ); SEMICOLON
-  Serial.print(currentStructure.accelerometerX); SEMICOLON
-  Serial.print(currentStructure.accelerometerY); SEMICOLON
-  Serial.print(currentStructure.accelerometerZ); SEMICOLON
-  Serial.print(currentStructure.barometer); SEMICOLON
-  Serial.print(currentStructure.thermometer); SEMICOLON
-  Serial.print(currentStructure.thermometer_stupido); SEMICOLON
-  Serial.print(currentStructure.voltage); NEWLINE
+
+  // Format the entire CSV line in one go:
+  String csvLine = String(currentStructure.id) + ";" +
+                   String(currentStructure.relativeTime) + ";" +
+                   String(currentStructure.gyroscope[0]) + ";" +
+                   String(currentStructure.gyroscope[1]) + ";" +
+                   String(currentStructure.gyroscope[2]) + ";" +
+                   String(currentStructure.accelerometer[0]) + ";" +
+                   String(currentStructure.accelerometer[1]) + ";" +
+                   String(currentStructure.accelerometer[2]) + ";" +
+                   String(currentStructure.barometer) + ";" +
+                   String(currentStructure.thermometer) + ";" +
+                   String(currentStructure.thermometer_stupido) + ";" +
+                   String(currentStructure.voltage) + "\n";
+
+   // Print the complete line at once:
+   Serial.print(csvLine); 
+
+  // After delivery succesfull to the I2C, let's ack the message (might cause some trouble doh)
+  ack.id = currentStructure.id;
+  esp_now_send(broadcastAddress, (uint8_t *) &(ack), sizeof(struct_ack));
 }
 
-void SendHeader(){
-  Serial.print("Timestamp"); SEMICOLON
-  Serial.print("GyroscopeX"); SEMICOLON
-  Serial.print("GyroscopeY"); SEMICOLON
-  Serial.print("GyroscopeZ"); SEMICOLON
-  Serial.print("AccelerometerX"); SEMICOLON
-  Serial.print("AccelerometerY"); SEMICOLON
-  Serial.print("AccelerometerZ"); SEMICOLON
-  Serial.print("Barometer"); SEMICOLON
-  Serial.print("Thermometer"); SEMICOLON
-  Serial.print("ThermometerStupido"); SEMICOLON
-  Serial.print("Voltage"); NEWLINE
+void SendHeader() {
+  Serial.print("ID;");
+  Serial.print("Timestamp;");
+  Serial.print("GyroscopeX;");
+  Serial.print("GyroscopeY;");
+  Serial.print("GyroscopeZ;");
+  Serial.print("AccelerometerX;");
+  Serial.print("AccelerometerY;");
+  Serial.print("AccelerometerZ;");
+  Serial.print("Barometer;");
+  Serial.print("Thermometer;");
+  Serial.print("ThermometerStupido;");
+  Serial.println("Voltage"); 
 }
 
 void setup() {

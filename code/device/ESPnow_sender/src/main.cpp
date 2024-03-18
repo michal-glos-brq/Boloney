@@ -3,48 +3,83 @@
 #include <WiFi.h>
 #include <main.h>
 
-uint8_t broadcastAddress[] = MAC_ADDRESS;
+#define BUFFER_CAPACITY 480
+#define PERIOD_TIME 250
+#define MIN_WAIT_TIME 25
+
+// Debug compilation (comment to turn debug off)
+#define DEBUG
+
+uint8_t broadcastAddress[] = MAC_ADDRESS_RCV;
+
+uint64_t id_counter = 0;
+
+uint64_t period_time_micros = PERIOD_TIME * 1000;
+uint64_t min_wait_time_micros = MIN_WAIT_TIME * 1000;
+
+uint64_t current_loop_start;
 
 // This function creates telemetryMessage struct 
-void readTelemetry(telemetryMessage * message){
-  if(message->valid == 1){
-    Serial.print("Rewriting valid message ...");
-    exit(1);
-  }
+void readTelemetry(){
 
   // Some actual logic will have to be implemented here ...
   // message->relativeTime = micros();
-  message->relativeTime = counter;
+  currentTelemetry.relativeTime = micros();
+  currentTelemetry.id = id_counter++;
+  currentTelemetry.valid = 1;
   // Mockity mock
-  message->valid = 1;
-  message->accelerometerX = 1;
-  message->accelerometerY = 2;
-  message->accelerometerZ = 3;
-  message->gyroscopeX = 4;
-  message->gyroscopeY = 5;
-  message->gyroscopeZ = 6;
-  message->barometer = 7;
-  message->thermometer = 8.0;
-  message->thermometer_stupido = 9.0;
-  message->voltage = 10.0;
+  currentTelemetry.accelerometer[0] = 1;
+  currentTelemetry.accelerometer[1] = 2;
+  currentTelemetry.accelerometer[2] = 3;
+  currentTelemetry.gyroscope[0] = 4;
+  currentTelemetry.gyroscope[1] = 5;
+  currentTelemetry.gyroscope[2] = 6;
+  currentTelemetry.barometer = 7;
+  currentTelemetry.thermometer = 8.0;
+  currentTelemetry.thermometer_stupido = 9.0;
+  currentTelemetry.voltage = 10.0;
 }
 
 
-// This sends a sinlge message, returns the send method return value
-// (success = 0, fail = 1) for further fail detection
-int sendMessage(struct telemetryMessage * message){
-  return (int)esp_now_send(broadcastAddress, (uint8_t *) message, sizeof(telemetryMessage));
+// This sends a sinlge message
+esp_err_t sendMessage(telemetryMessage * message){
+  return esp_now_send(broadcastAddress, (uint8_t *) message, sizeof(telemetryMessage));
 }
 
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("Iteration: ");
-  Serial.println(counter);
-  Serial.print("Failed: ");
-  Serial.println(failed);
-  Serial.print("Failed to save: ");
-  Serial.println(failed_save);
+    #ifdef DEBUG
+    Serial.print("Data sent status: ");
+    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+    #endif
+}
+
+
+// This function is OnReceive callback and invalidates the message from buffer 
+// with received ID (as long int) as a form of ack
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+  telemetryAck * message = (telemetryAck *) incomingData;
+
+  if (currentTelemetry.id == message->id) {
+    #ifdef DEBUG
+    Serial.println("Ack for the last msg.");
+    #endif
+    currentTelemetry.valid = 0;
+    return;
+  }
+
+  #ifdef DEBUG
+  Serial.print("Ack for the msg: ");
+  Serial.println(message->id);
+  #endif
+
+  for (int i = 0; i < BUFFER_CAPACITY; i++) {
+    if (telemetryArray[i].id == message->id) {
+      telemetryArray[i].valid = 0;
+      break;
+    }
+  }
 }
 
 void setup() {
@@ -54,28 +89,37 @@ void setup() {
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
 
+
+  #ifdef DEBUG
+  byte mac[6];
+  WiFi.macAddress(mac);
+  Serial.print("MAC address: ");
+  for (int i = 0; i < 6; i++) {
+    Serial.print(mac[i], HEX);
+    if (i < 5) Serial.print(":");
+  }
+  Serial.println();
+  #endif
+
   // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
     return (void) 1;
   }
 
-  counter = 0;
-  failed = 0;
-  failed_save = 0;
-  telemetryArray = (telemetryMessage *)malloc(BUFFER_CAPACITY * sizeof(telemetryMessage));
-  currentTelemetry.valid = 0;
-  readTelemetry(&currentTelemetry);
-
-  // Set all entries from array to NULLs
-  for (int i = 0; i < BUFFER_CAPACITY; i++){
-    Serial.print(i);
-    telemetryArray[i].valid = 0;
-  }
-
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Transmitted packet
   esp_now_register_send_cb(OnDataSent);
+  esp_now_register_recv_cb(OnDataRecv);
+
+  telemetryArray = (telemetryMessage *) calloc(BUFFER_CAPACITY, sizeof(telemetryMessage));
+  currentTelemetry.valid = 0;
+
+  for (int i = 0; i < BUFFER_CAPACITY; i++) {
+    telemetryArray[i].valid = 0;
+  }
+
+  readTelemetry();
 
   // Register peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
@@ -89,59 +133,102 @@ void setup() {
   }
 }
 
-int saveMessage(telemetryMessage * msg){
-  int i;
-  Serial.print(telemetryArray[0].valid);
-  Serial.print(";");
-  Serial.print(telemetryArray[1].valid);
-  Serial.print(";");
-  Serial.print(telemetryArray[2].valid);
-  Serial.print(";");
-  Serial.print(telemetryArray[3].valid);
-  Serial.print(";");
-  Serial.print(telemetryArray[4].valid);
-  Serial.print(";");
-  Serial.print(telemetryArray[5].valid);
-  Serial.print(";");
-  Serial.print(telemetryArray[6].valid);
-  for (i = 0;i < BUFFER_CAPACITY && telemetryArray[i].valid == 1; i++);
-  if(i < BUFFER_CAPACITY) {
-    Serial.print("Position in array: ");
-    Serial.print(i);
-    telemetryArray[i] = currentTelemetry;
-    // memcpy(&currentTelemetry, &(telemetryArray[i]), sizeof(telemetryMessage));
-    return 0;
+void saveMessage() {
+  // Saves current message to the buffer
+  if (currentTelemetry.valid == 0) {
+    return;
   }
-  Serial.print("What the hell");
-  int ii = 0;
-  uint64_t tmpTime = UINT64_MAX;
-  for(i = 0; i < BUFFER_CAPACITY; i++) {
-    if (telemetryArray[i].relativeTime < tmpTime) {
-      tmpTime = telemetryArray[i].relativeTime;
-      ii = i;
+
+  #ifdef DEBUG
+  Serial.println("Warning! Message not confirmed - saving into buffer");
+  #endif
+
+  for (int i = 0; i < BUFFER_CAPACITY; i++) {
+    if (telemetryArray[i].valid == 0) {
+      // Copy currentTelemetry to the telemetry array at I place with memcpy
+      memcpy(&telemetryArray[i], &currentTelemetry, sizeof(telemetryMessage));
+      return;
     }
   }
-  telemetryArray[ii] = currentTelemetry;
-  //memcpy(&currentTelemetry, &(telemetryArray[ii]), sizeof(telemetryMessage));
-  // One got flagged as invalid now
-  return 1;
+  // If buffer is full, let's replace the oldest entry
+  #ifdef DEBUG
+  Serial.println("Warning! Buffer full - overwriting");
+  #endif
+
+  uint64_t tmpTime = telemetryArray[0].relativeTime;
+  int tmpIndex = 0;
+  for (int i = 1; i < BUFFER_CAPACITY; i++) {
+    if (telemetryArray[i].relativeTime < tmpTime) {
+      tmpTime = telemetryArray[i].relativeTime;
+      tmpIndex = i;
+    }
+  }
+  memcpy(&telemetryArray[tmpIndex], &currentTelemetry, sizeof(telemetryMessage));
+  return;
+ }
+
+void sendMessages() {
+  // Try to send all valid messages (older then ) from the buffer
+  #ifdef DEBUG
+  Serial.print("Sending: ");
+  #endif
+  
+  for (int i = 0; i < BUFFER_CAPACITY; i++) {
+
+    if (telemetryArray[i].valid == 1) {
+      sendMessage(&telemetryArray[i]);
+      #ifdef DEBUG
+      Serial.print(i);
+      Serial.print(", ");
+      #endif
+    }
+    // Check whether half time from sleep time already elapsed, if so, break and return
+    if ((micros() - current_loop_start) > min_wait_time_micros) {
+      break;
+    }
+  }
+  #ifdef DEBUG
+  Serial.println();
+  #endif
 }
 
 void loop() {
-  currentTelemetry.valid = 0;
-  readTelemetry(&currentTelemetry);
+  current_loop_start = micros();
 
+  #ifdef DEBUG
+  Serial.println("++++++++++++++++++++++++++++++++++++++++");
+  Serial.print("Iteration: ");
+  Serial.println(id_counter);
+  Serial.print("1) Occupied indices:");
+  for (int i = 0; i<BUFFER_CAPACITY; i++) {
+    if (telemetryArray[i].valid == 1) {
+      Serial.print(i);
+      Serial.print(", ");
+    }
+  }
+  Serial.println();
+  #endif
+
+  // Save the previous message if not acked
+  saveMessage();
+
+  // Try to send stuff from the buffer
+  sendMessages();
+
+  // Try to send current telemetry
+  readTelemetry();
   esp_now_peer_info();
-  // If send success, try to send history buffer
-  if(sendMessage(&currentTelemetry)){
-    // Send messages
-    Serial.println("Msg succeeded\n");
+  esp_err_t succ = sendMessage(&currentTelemetry);
+
+  #ifdef DEBUG
+  if (succ == ESP_OK) {
+    Serial.println("Sent OK ...");
   }
-  else{
-    Serial.println("Msg failed\n");
-    failed++;
-    failed_save += saveMessage(&currentTelemetry);
+  else {
+    Serial.println("Sent not OK ...");
   }
-  counter++;
-  delay(SLEEP_TIME);
+  #endif
+
+  // Sleep for the remainder of time
+  delay((period_time_micros - (micros() - current_loop_start)) / 1000);
 }
