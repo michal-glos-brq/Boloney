@@ -2,26 +2,32 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <main.h>
+#include <mutex>
 
 #define BUFFER_CAPACITY 100
 #define PERIOD_TIME 2500
-#define MIN_WAIT_TIME 1250
+#define MIN_WAIT_TIME 1250 // For sending current message basically
 
 // Debug compilation (comment to turn debug off)
 #define DEBUG
+
+
+// Mutex for concurrent stack access
+std::mutex mtx_stack, mtx_struct;
+
 
 uint8_t broadcastAddress[] = MAC_ADDRESS_RCV;
 
 uint64_t id_counter = 0;
 
+// Timing stuff
 uint64_t period_time_micros = PERIOD_TIME * 1000;
 uint64_t min_wait_time_micros = MIN_WAIT_TIME * 1000;
-
 uint64_t current_loop_start;
 
 // This function creates telemetryMessage struct 
 void readTelemetry(){
-
+  mtx_struct.lock();
   // Some actual logic will have to be implemented here ...
   // message->relativeTime = micros();
   currentTelemetry.relativeTime = micros();
@@ -38,6 +44,7 @@ void readTelemetry(){
   currentTelemetry.thermometer = 8.0;
   currentTelemetry.thermometer_stupido = 9.0;
   currentTelemetry.voltage = 10.0;
+  mtx_struct.unlock();
 }
 
 
@@ -49,43 +56,49 @@ esp_err_t sendMessage(telemetryMessage * message){
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-    #ifdef DEBUG
-    Serial.print("Data sent status: ");
-    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
-    #endif
 }
 
 
 // This function is OnReceive callback and invalidates the message from buffer 
 // with received ID (as long int) as a form of ack
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  #ifdef DEBUG
-  Serial.println("Ack ...");
-  #endif
   telemetryMessage * message = (telemetryMessage *) incomingData;
 
+  mtx_struct.lock();
   if (currentTelemetry.id == message->id) {
     #ifdef DEBUG
-    Serial.println("Ack for the last msg.");
+    Serial.print("Ack for last message: ");
+    Serial.println(currentTelemetry.id);
     #endif
     currentTelemetry.valid = 0;
+    mtx_struct.unlock();
     return;
   }
+  else {
+    mtx_struct.unlock();
 
-  #ifdef DEBUG
-  Serial.print("Ack for the msg: ");
-  Serial.println(message->id);
-  #endif
+    #ifdef DEBUG
+    Serial.print("Ack for message: ");
+    Serial.println(message->id);
+    #endif
 
-  for (int i = 0; i < BUFFER_CAPACITY; i++) {
-    if (telemetryArray[i].id == message->id) {
-      telemetryArray[i].valid = 0;
-      break;
+    mtx_stack.lock();
+    for (int i = 0; i < BUFFER_CAPACITY; i++) {
+      if (telemetryArray[i].id == message->id) {
+        telemetryArray[i].valid = 0;
+        break;
+      }
     }
+    mtx_stack.unlock();
   }
+
 }
 
 void setup() {
+
+  mtx_stack.lock();
+  mtx_struct.lock();
+
   // Init Serial Monitor
   Serial.begin(115200);
  
@@ -122,6 +135,7 @@ void setup() {
     telemetryArray[i].valid = 0;
   }
 
+  mtx_struct.unlock();
   readTelemetry();
 
   // Register peer
@@ -134,57 +148,76 @@ void setup() {
     Serial.println("Failed to add peer");
     return (void) 1;
   }
+
+  mtx_stack.unlock();
 }
 
 void saveMessage() {
   // Saves current message to the buffer
+  mtx_struct.lock();
   if (currentTelemetry.valid == 0) {
+    mtx_struct.unlock();
     return;
   }
+  else {
+    mtx_struct.unlock();
+    #ifdef DEBUG
+    Serial.println("Warning! Message not confirmed - saving into buffer");
+    #endif
 
-  #ifdef DEBUG
-  Serial.println("Warning! Message not confirmed - saving into buffer");
-  #endif
-
-  for (int i = 0; i < BUFFER_CAPACITY; i++) {
-    if (telemetryArray[i].valid == 0) {
-      // Copy currentTelemetry to the telemetry array at I place with memcpy
-      memcpy(&telemetryArray[i], &currentTelemetry, sizeof(telemetryMessage));
-      return;
+    for (int i = 0; i < BUFFER_CAPACITY; i++) {
+      mtx_stack.lock();
+      if (telemetryArray[i].valid == 0) {
+        // Copy currentTelemetry to the telemetry array at I place with memcpy
+        mtx_struct.lock();
+        memcpy(&telemetryArray[i], &currentTelemetry, sizeof(telemetryMessage));
+        mtx_struct.unlock();
+        mtx_stack.unlock();
+        return;
+      }
+      else {
+        mtx_stack.unlock();
+      }
     }
-  }
-  // If buffer is full, let's replace the oldest entry
-  #ifdef DEBUG
-  Serial.println("Warning! Buffer full - overwriting");
-  #endif
+    
+    // If buffer is full, let's replace the oldest entry
+    #ifdef DEBUG
+    Serial.println("Warning! Buffer full - overwriting");
+    #endif
 
-  uint64_t tmpTime = telemetryArray[0].relativeTime;
-  int tmpIndex = 0;
-  for (int i = 1; i < BUFFER_CAPACITY; i++) {
-    if (telemetryArray[i].relativeTime < tmpTime) {
-      tmpTime = telemetryArray[i].relativeTime;
-      tmpIndex = i;
+    mtx_stack.lock();
+    uint64_t tmpTime = telemetryArray[0].relativeTime;
+    int tmpIndex = 0;
+    for (int i = 1; i < BUFFER_CAPACITY; i++) {
+      if (telemetryArray[i].relativeTime < tmpTime) {
+        tmpTime = telemetryArray[i].relativeTime;
+        tmpIndex = i;
+      }
     }
+    mtx_struct.lock();
+    memcpy(&telemetryArray[tmpIndex], &currentTelemetry, sizeof(telemetryMessage));
+    mtx_struct.unlock();
+    mtx_stack.unlock();
+    return;
   }
-  memcpy(&telemetryArray[tmpIndex], &currentTelemetry, sizeof(telemetryMessage));
-  return;
  }
 
 void sendMessages() {
   // Try to send all valid messages (older then ) from the buffer
   #ifdef DEBUG
-  Serial.print("Sending: ");
+  Serial.print("2) Sending: ");
   #endif
   
   for (int i = 0; i < BUFFER_CAPACITY; i++) {
-
+    mtx_stack.lock();
     if (telemetryArray[i].valid == 1) {
       sendMessage(&telemetryArray[i]);
       #ifdef DEBUG
-      Serial.print(i);
+      Serial.print(telemetryArray[i].id);
       Serial.print(", ");
       #endif
     }
+    mtx_stack.unlock();
     // Check whether half time from sleep time already elapsed, if so, break and return
     if ((micros() - current_loop_start) > min_wait_time_micros) {
       break;
@@ -202,12 +235,14 @@ void loop() {
   Serial.println("++++++++++++++++++++++++++++++++++++++++");
   Serial.print("Iteration: ");
   Serial.println(id_counter);
-  Serial.print("1) Occupied indices:");
+  Serial.print("1) buffered messages:");
   for (int i = 0; i<BUFFER_CAPACITY; i++) {
+    mtx_stack.lock();
     if (telemetryArray[i].valid == 1) {
-      Serial.print(i);
+      Serial.print(telemetryArray[i].id);
       Serial.print(", ");
     }
+    mtx_stack.unlock();
   }
   Serial.println();
   #endif

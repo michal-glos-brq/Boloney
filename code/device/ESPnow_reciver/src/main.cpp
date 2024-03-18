@@ -5,7 +5,7 @@
 #include <main.h>
 
 #define BUFFER_CAPACITY 100
-#define SLEEP_PERIOD 50
+#define SLEEP_PERIOD 1
 
 #define DEBUG
 
@@ -27,10 +27,7 @@ esp_err_t sendMessage(telemetryMessage * message){
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-    #ifdef DEBUG
-    Serial.print("Data sent status: ");
-    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
-    #endif
+
 }
 
 void print_entry(telemetryMessage * msg) {
@@ -66,7 +63,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   Serial.println(telemetryArray[top].id);
   #endif
 
-  top--;
+  print_entry(&(telemetryArray[top++]));
   mtx_stack.unlock();
 
 }
@@ -142,13 +139,12 @@ void loop() {
   // put your main code here, to run repeatedly:
     // After delivery succesfull to the I2C, let's ack the message (might cause some trouble doh)
   
+  mtx_stack.lock();
   esp_err_t err;
   while (top != -1) {
-    mtx_stack.lock();
-    err = sendMessage(&(telemetryArray[top]));
-    print_entry(&(telemetryArray[top--]));
-    mtx_stack.unlock();
+    err = sendMessage(&(telemetryArray[top--]));
   }
+  mtx_stack.unlock();
 
 
 
