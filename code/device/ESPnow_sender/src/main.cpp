@@ -283,7 +283,7 @@ void loop() {
     // Try to send stuff from the buffer
     // So even when the cappacity is set, do not try to dump all when
     // message not obtained for CONNECTION_TIMEOUT ms.
-    if (micros() - last_message_received < CONNECTION_TIMEOUT) {
+    if (micros() - last_message_received < (CONNECTION_TIMEOUT * 1000)) {
       sendMessages();
     }
     #ifdef DEBUG
