@@ -5,7 +5,7 @@
 #include <main.h>
 
 #define BUFFER_CAPACITY 100
-#define SLEEP_PERIOD 1
+#define SLEEP_PERIOD 66
 
 #define DEBUG
 
@@ -142,7 +142,8 @@ void loop() {
   mtx_stack.lock();
   esp_err_t err;
   while (top != -1) {
-    err = sendMessage(&(telemetryArray[top--]));
+    memcpy(&currentTelemetry, &(telemetryArray[top--]), sizeof(telemetryMessage));
+    err = sendMessage(&currentTelemetry);
   }
   mtx_stack.unlock();
 
