@@ -1,43 +1,75 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <mutex>
 #include <main.h>
 
+#define BUFFER_CAPACITY 100
+#define SLEEP_PERIOD 50
+
+#define DEBUG
+
 uint8_t broadcastAddress[] = MAC_ADDRESS_SND;
+int top = -1;
+
+
+std::mutex mtx_stack;
+std::mutex mtx_struct;
 
 
 // MAC Address of the ESP32 devboard (cap on enable pin): 24:6F:28:25:E4:90
 // MAC Address of the ESP32 devboard: C8:F0:9E:9B:32:04
 // MAC Address of the ESP32 LoRa Board: 50:02:91:8A:F7:40
 
-// Create a struct_message called myData
-telemetryMessage currentStructure;
-telemetryAck ack;
+// This sends a sinlge message
+esp_err_t sendMessage(telemetryMessage * message){
+  return esp_now_send(broadcastAddress, (uint8_t *) message, sizeof(telemetryMessage));
+}
 
-// callback function that will be executed when data is received
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  memcpy(&currentStructure, incomingData, sizeof(telemetryMessage));
+// callback when data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+    #ifdef DEBUG
+    Serial.print("Data sent status: ");
+    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+    #endif
+}
 
+void print_entry(telemetryMessage * msg) {
   // Format the entire CSV line in one go:
-  String csvLine = String(currentStructure.id) + ";" +
-                   String(currentStructure.relativeTime) + ";" +
-                   String(currentStructure.gyroscope[0]) + ";" +
-                   String(currentStructure.gyroscope[1]) + ";" +
-                   String(currentStructure.gyroscope[2]) + ";" +
-                   String(currentStructure.accelerometer[0]) + ";" +
-                   String(currentStructure.accelerometer[1]) + ";" +
-                   String(currentStructure.accelerometer[2]) + ";" +
-                   String(currentStructure.barometer) + ";" +
-                   String(currentStructure.thermometer) + ";" +
-                   String(currentStructure.thermometer_stupido) + ";" +
-                   String(currentStructure.voltage) + "\n";
+  String csvLine = String(msg->id) + ";" +
+                   String(msg->relativeTime) + ";" +
+                   String(msg->gyroscope[0]) + ";" +
+                   String(msg->gyroscope[1]) + ";" +
+                   String(msg->gyroscope[2]) + ";" +
+                   String(msg->accelerometer[0]) + ";" +
+                   String(msg->accelerometer[1]) + ";" +
+                   String(msg->accelerometer[2]) + ";" +
+                   String(msg->barometer) + ";" +
+                   String(msg->thermometer) + ";" +
+                   String(msg->thermometer_stupido) + ";" +
+                   String(msg->voltage) + "\n";
 
    // Print the complete line at once:
    Serial.print(csvLine); 
+}
 
-  // After delivery succesfull to the I2C, let's ack the message (might cause some trouble doh)
-  ack.id = currentStructure.id;
-  esp_now_send(broadcastAddress, (uint8_t *) &(ack), sizeof(struct_ack));
+// callback function that will be executed when data is received
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+  mtx_stack.lock();
+  if (top >= BUFFER_CAPACITY) {
+    mtx_stack.unlock();
+    return;
+  }
+  #ifdef DEBUG
+  Serial.println("Satring to save msg");
+  #endif
+
+  memcpy(&(telemetryArray[top++]), incomingData, sizeof(telemetryMessage));
+  mtx_stack.unlock();
+  
+  #ifdef DEBUG
+  Serial.println("Saved msg");
+  #endif
 }
 
 void SendHeader() {
@@ -64,8 +96,21 @@ void setup() {
   Serial.println(WiFi.macAddress());
   */
 
+  mtx_stack.lock();
+
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
+
+  #ifdef DEBUG
+  byte mac[6];
+  WiFi.macAddress(mac);
+  Serial.print("MAC address: ");
+  for (int i = 0; i < 6; i++) {
+    Serial.print(mac[i], HEX);
+    if (i < 5) Serial.print(":");
+  }
+  Serial.println();
+  #endif
 
   // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
@@ -73,13 +118,60 @@ void setup() {
     return;
   }
 
-  SendHeader();
   // Once ESPNow is successfully Init, we will register for recv CB to
   // get recv packer info
   esp_now_register_recv_cb(OnDataRecv);
+  esp_now_register_send_cb(OnDataSent);
 
+  telemetryArray = (telemetryMessage *) calloc(BUFFER_CAPACITY, sizeof(telemetryMessage));
+  currentTelemetry.valid = 0;
+  SendHeader();
+
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 1;
+  peerInfo.encrypt = false;
+
+  // Add peer        
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer");
+    return (void) 1;
+  }
+  #ifdef DEBUG
+  Serial.println("Setup finished succesfully");
+  #endif
+
+  mtx_stack.unlock();
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+    // After delivery succesfull to the I2C, let's ack the message (might cause some trouble doh)
+  
+  esp_err_t err;
+  while (top != -1) {
+    mtx_struct.lock();
+    mtx_stack.lock();
+    memcpy(&currentTelemetry, &telemetryArray[top--], sizeof(telemetryMessage));
+    mtx_stack.unlock();
+    print_entry(&currentTelemetry);
+    err = sendMessage(&currentTelemetry);
+    
+    #ifndef DEBUG
+    mtx_struct.unlock();
+    
+    #else
+    Serial.print("Received data and sent back data (ID: ");
+    Serial.print(currentTelemetry.id);
+
+    mtx_struct.unlock();
+
+    Serial.print("; Err (err if eq. 1): ");
+    Serial.print((int)(err!=ESP_OK));
+    Serial.print(")\n");
+    #endif
+  }
+
+
+
+  delay(SLEEP_PERIOD);
 }

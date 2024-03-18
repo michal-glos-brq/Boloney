@@ -17,10 +17,6 @@ typedef struct telemetryMessage {
     float voltage;
 } struct_message;
 
-typedef struct telemetryAck {
-    uint64_t id;
-} struct_ack;
-
 
 esp_now_peer_info_t peerInfo;
 

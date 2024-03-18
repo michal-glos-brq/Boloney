@@ -3,9 +3,9 @@
 #include <WiFi.h>
 #include <main.h>
 
-#define BUFFER_CAPACITY 480
-#define PERIOD_TIME 250
-#define MIN_WAIT_TIME 25
+#define BUFFER_CAPACITY 100
+#define PERIOD_TIME 2500
+#define MIN_WAIT_TIME 1250
 
 // Debug compilation (comment to turn debug off)
 #define DEBUG
@@ -59,7 +59,10 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 // This function is OnReceive callback and invalidates the message from buffer 
 // with received ID (as long int) as a form of ack
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  telemetryAck * message = (telemetryAck *) incomingData;
+  #ifdef DEBUG
+  Serial.println("Ack ...");
+  #endif
+  telemetryMessage * message = (telemetryMessage *) incomingData;
 
   if (currentTelemetry.id == message->id) {
     #ifdef DEBUG
