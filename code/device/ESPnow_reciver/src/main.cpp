@@ -14,7 +14,6 @@ int top = -1;
 
 
 std::mutex mtx_stack;
-std::mutex mtx_struct;
 
 
 // MAC Address of the ESP32 devboard (cap on enable pin): 24:6F:28:25:E4:90
@@ -60,16 +59,16 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     mtx_stack.unlock();
     return;
   }
+
+  memcpy(&(telemetryArray[top]), incomingData, sizeof(telemetryMessage));
   #ifdef DEBUG
-  Serial.println("Satring to save msg");
+  Serial.print("Received msg: ");
+  Serial.println(telemetryArray[top].id);
   #endif
 
-  memcpy(&(telemetryArray[top++]), incomingData, sizeof(telemetryMessage));
+  top--;
   mtx_stack.unlock();
-  
-  #ifdef DEBUG
-  Serial.println("Saved msg");
-  #endif
+
 }
 
 void SendHeader() {
@@ -136,10 +135,6 @@ void setup() {
     Serial.println("Failed to add peer");
     return (void) 1;
   }
-  #ifdef DEBUG
-  Serial.println("Setup finished succesfully");
-  #endif
-
   mtx_stack.unlock();
 }
 
@@ -149,26 +144,10 @@ void loop() {
   
   esp_err_t err;
   while (top != -1) {
-    mtx_struct.lock();
     mtx_stack.lock();
-    memcpy(&currentTelemetry, &telemetryArray[top--], sizeof(telemetryMessage));
+    err = sendMessage(&(telemetryArray[top]));
+    print_entry(&(telemetryArray[top--]));
     mtx_stack.unlock();
-    print_entry(&currentTelemetry);
-    err = sendMessage(&currentTelemetry);
-    
-    #ifndef DEBUG
-    mtx_struct.unlock();
-    
-    #else
-    Serial.print("Received data and sent back data (ID: ");
-    Serial.print(currentTelemetry.id);
-
-    mtx_struct.unlock();
-
-    Serial.print("; Err (err if eq. 1): ");
-    Serial.print((int)(err!=ESP_OK));
-    Serial.print(")\n");
-    #endif
   }
 
 
