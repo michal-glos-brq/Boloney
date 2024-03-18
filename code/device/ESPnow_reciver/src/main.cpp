@@ -141,8 +141,8 @@ void loop() {
   
   mtx_stack.lock();
   esp_err_t err;
-  while (top != -1) {
-    memcpy(&currentTelemetry, &(telemetryArray[top--]), sizeof(telemetryMessage));
+  while (top > 0) {
+    memcpy(&currentTelemetry, &(telemetryArray[--top]), sizeof(telemetryMessage));
     err = sendMessage(&currentTelemetry);
   }
   mtx_stack.unlock();
