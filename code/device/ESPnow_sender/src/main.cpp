@@ -4,9 +4,10 @@
 #include <main.h>
 #include <mutex>
 
-#define BUFFER_CAPACITY 100
+#define BUFFER_CAPACITY 100 // 0 for electrical efficiency
 #define PERIOD_TIME 2500
 #define MIN_WAIT_TIME 1250 // For sending current message basically
+#define CONNECTION_TIMEOUT 5000 // TImeout to stop sending messages (dumps)
 
 // Debug compilation (comment to turn debug off)
 #define DEBUG
@@ -34,7 +35,7 @@ uint64_t id_counter = 0;
 // Timing stuff
 uint64_t period_time_micros = PERIOD_TIME * 1000;
 uint64_t min_wait_time_micros = MIN_WAIT_TIME * 1000;
-uint64_t current_loop_start;
+uint64_t current_loop_start, last_message_received;
 
 // This function creates telemetryMessage struct 
 void readTelemetry(){
@@ -73,6 +74,7 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 // This function is OnReceive callback and invalidates the message from buffer 
 // with received ID (as long int) as a form of ack
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+  last_message_received = micros();
   telemetryMessage * message = (telemetryMessage *) incomingData;
 
   mtx_struct.lock();
@@ -154,6 +156,7 @@ void setup() {
 
   telemetryArray = (telemetryMessage *) calloc(BUFFER_CAPACITY, sizeof(telemetryMessage));
   currentTelemetry.valid = 0;
+  last_message_received = micros();
 
   setupReading();
 
@@ -273,11 +276,22 @@ void loop() {
   Serial.println();
   #endif
 
-  // Save the previous message if not acked
-  saveMessage();
+  if (BUFFER_CAPACITY != 0) {
+    // Save the previous message if not acked
+    saveMessage();
 
-  // Try to send stuff from the buffer
-  sendMessages();
+    // Try to send stuff from the buffer
+    // So even when the cappacity is set, do not try to dump all when
+    // message not obtained for CONNECTION_TIMEOUT ms.
+    if (micros() - last_message_received < CONNECTION_TIMEOUT) {
+      sendMessages();
+    }
+    #ifdef DEBUG
+    else {
+      Serial.println("Connection to GS timed out ...");
+    }
+    #endif
+  }
 
   // Try to send current telemetry
   readTelemetry();

@@ -12,8 +12,8 @@ typedef struct telemetryMessage {
     uint64_t relativeTime;
     uint64_t id;
     int valid;
-    long gyroscope[3];
-    long accelerometer[3];
+    double gyroscope[3];
+    double accelerometer[3];
     int barometer;
     float thermometer;
     float thermometer_stupido;
