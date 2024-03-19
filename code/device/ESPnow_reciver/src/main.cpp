@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
-#include <mutex>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include <main.h>
 
 #define BUFFER_CAPACITY 100
@@ -12,25 +13,25 @@
 uint8_t broadcastAddress[] = MAC_ADDRESS_SND;
 int top = -1;
 
-
-std::mutex mtx_stack;
-
+SemaphoreHandle_t mtx_stack;
 
 // MAC Address of the ESP32 devboard (cap on enable pin): 24:6F:28:25:E4:90
 // MAC Address of the ESP32 devboard: C8:F0:9E:9B:32:04
 // MAC Address of the ESP32 LoRa Board: 50:02:91:8A:F7:40
 
 // This sends a sinlge message
-esp_err_t sendMessage(telemetryMessage * message){
-  return esp_now_send(broadcastAddress, (uint8_t *) message, sizeof(telemetryMessage));
+esp_err_t sendMessage(telemetryMessage *message)
+{
+  return esp_now_send(broadcastAddress, (uint8_t *)message, sizeof(telemetryMessage));
 }
 
 // callback when data is sent
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
+{
 }
 
-void print_entry(telemetryMessage * msg) {
+void print_entry(telemetryMessage *msg)
+{
   // Format the entire CSV line in one go:
   String csvLine = String(msg->id) + ";" +
                    String(msg->relativeTime) + ";" +
@@ -45,30 +46,34 @@ void print_entry(telemetryMessage * msg) {
                    String(msg->thermometer_stupido) + ";" +
                    String(msg->voltage) + "\n";
 
-   // Print the complete line at once:
-   Serial.print(csvLine); 
+  // Print the complete line at once:
+  Serial.print(csvLine);
 }
 
 // callback function that will be executed when data is received
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  mtx_stack.lock();
-  if (top >= BUFFER_CAPACITY) {
-    mtx_stack.unlock();
-    return;
+void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
+{
+  if (xSemaphoreTake(mtx_stack, portMAX_DELAY) == pdTRUE)
+  {
+    if (top >= BUFFER_CAPACITY)
+    {
+      xSemaphoreGive(mtx_stack);
+      return;
+    }
+
+    memcpy(&(telemetryArray[top]), incomingData, sizeof(telemetryMessage));
+#ifdef DEBUG
+    Serial.print("Received msg: ");
+    Serial.println(telemetryArray[top].id);
+#endif
+
+    print_entry(&(telemetryArray[top++]));
+    xSemaphoreGive(mtx_stack);
   }
-
-  memcpy(&(telemetryArray[top]), incomingData, sizeof(telemetryMessage));
-  #ifdef DEBUG
-  Serial.print("Received msg: ");
-  Serial.println(telemetryArray[top].id);
-  #endif
-
-  print_entry(&(telemetryArray[top++]));
-  mtx_stack.unlock();
-
 }
 
-void SendHeader() {
+void SendHeader()
+{
   Serial.print("ID;");
   Serial.print("Timestamp;");
   Serial.print("GyroscopeX;");
@@ -80,10 +85,11 @@ void SendHeader() {
   Serial.print("Barometer;");
   Serial.print("Thermometer;");
   Serial.print("ThermometerStupido;");
-  Serial.println("Voltage"); 
+  Serial.println("Voltage");
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
 
   /*
@@ -92,62 +98,75 @@ void setup() {
   Serial.println(WiFi.macAddress());
   */
 
-  mtx_stack.lock();
-
-  // Set device as a Wi-Fi Station
-  WiFi.mode(WIFI_STA);
-
-  #ifdef DEBUG
-  byte mac[6];
-  WiFi.macAddress(mac);
-  Serial.print("MAC address: ");
-  for (int i = 0; i < 6; i++) {
-    Serial.print(mac[i], HEX);
-    if (i < 5) Serial.print(":");
-  }
-  Serial.println();
-  #endif
-
-  // Init ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
+  mtx_stack = xSemaphoreCreateMutex();
+  if (mtx_stack == NULL)
+  {
+    Serial.println("Error initializing semaphore.");
   }
 
-  // Once ESPNow is successfully Init, we will register for recv CB to
-  // get recv packer info
-  esp_now_register_recv_cb(OnDataRecv);
-  esp_now_register_send_cb(OnDataSent);
+  if (xSemaphoreTake(mtx_stack, portMAX_DELAY) == pdTRUE)
+  {
+    // Set device as a Wi-Fi Station
+    WiFi.mode(WIFI_STA);
 
-  telemetryArray = (telemetryMessage *) calloc(BUFFER_CAPACITY, sizeof(telemetryMessage));
-  currentTelemetry.valid = 0;
-  SendHeader();
+#ifdef DEBUG
+    byte mac[6];
+    WiFi.macAddress(mac);
+    Serial.print("MAC address: ");
+    for (int i = 0; i < 6; i++)
+    {
+      Serial.print(mac[i], HEX);
+      if (i < 5)
+        Serial.print(":");
+    }
+    Serial.println();
+#endif
 
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 1;
-  peerInfo.encrypt = false;
+    // Init ESP-NOW
+    if (esp_now_init() != ESP_OK)
+    {
+      Serial.println("Error initializing ESP-NOW");
+      return;
+    }
 
-  // Add peer        
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
-    return (void) 1;
+    // Once ESPNow is successfully Init, we will register for recv CB to
+    // get recv packer info
+    esp_now_register_recv_cb(OnDataRecv);
+    esp_now_register_send_cb(OnDataSent);
+
+    telemetryArray = (telemetryMessage *)calloc(BUFFER_CAPACITY, sizeof(telemetryMessage));
+    currentTelemetry.valid = 0;
+    SendHeader();
+
+    memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+    peerInfo.channel = 1;
+    peerInfo.encrypt = false;
+
+    // Add peer
+    if (esp_now_add_peer(&peerInfo) != ESP_OK)
+    {
+      Serial.println("Failed to add peer");
+      return (void)1;
+    }
+    xSemaphoreGive(mtx_stack);
   }
-  mtx_stack.unlock();
 }
 
-void loop() {
+void loop()
+{
   // put your main code here, to run repeatedly:
-    // After delivery succesfull to the I2C, let's ack the message (might cause some trouble doh)
-  
-  mtx_stack.lock();
-  esp_err_t err;
-  while (top > 0) {
-    memcpy(&currentTelemetry, &(telemetryArray[--top]), sizeof(telemetryMessage));
-    err = sendMessage(&currentTelemetry);
+  // After delivery succesfull to the I2C, let's ack the message (might cause some trouble doh)
+
+  if (xSemaphoreTake(mtx_stack, portMAX_DELAY) == pdTRUE)
+  {
+    esp_err_t err;
+    while (top > 0)
+    {
+      memcpy(&currentTelemetry, &(telemetryArray[--top]), sizeof(telemetryMessage));
+      err = sendMessage(&currentTelemetry);
+    }
+    xSemaphoreGive(mtx_stack);
   }
-  mtx_stack.unlock();
-
-
 
   delay(SLEEP_PERIOD);
 }
