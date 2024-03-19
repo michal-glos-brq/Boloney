@@ -52,11 +52,11 @@ void loop() {
     // can now print out the new measurements
     Serial.print(F("Temperature = "));
     Serial.print(bmp.readTemperature());
-    Serial.println(" *C");
+    Serial.print(" *C, ");
 
     Serial.print(F("Pressure = "));
     Serial.print(bmp.readPressure());
-    Serial.println(" Pa");
+    Serial.print(" Pa, ");
 
     Serial.print(F("Approx altitude = "));
     Serial.print(bmp.readAltitude(1013.25)); /* Adjusted to local forecast! */
