@@ -1,44 +1,30 @@
+#ifndef MAIN_H
+#define MAIN_H
+
 #include <esp_now.h>
-/*##################*/
-/* Macros and stuff */
-/*##################*/
 
 // C8:F0:9E:9B:32:04 (not sure about this comment)
-#define MAC_ADDRESS {0xC8, 0xF0, 0x9E, 0x9B, 0x32, 0x04};
+#define MAC_ADDRESS_RCV {0xC8, 0xF0, 0x9E, 0x9B, 0x32, 0x04};
+#define MAC_ADDRESS_SND {0x24, 0x6F, 0x28, 0x25, 0xE4, 0x90};
 
-#define BUFFER_CAPACITY 128
-
-/*############*/
-/* Datatypes */
-/*############*/
-
-// Structure example to send data
-// Must match the receiver structure
 typedef struct telemetryMessage {
     // Relative time will be kept, absolute time will be noted roughly
     uint64_t relativeTime;
-    int gyroscope[3];
-    int accelerometer[3];
+    uint64_t id;
+    int valid;
+    double gyroscope[3];
+    double accelerometer[3];
     int barometer;
     float thermometer;
     float thermometer_stupido;
     float voltage;
 } struct_message;
 
-// Define the array
-// For simplicity, for now, let's define it as an array full of NULLs
-// So we could check easily the whole array for some data present
-// If you do not understand, please write me, i promise - it makes sense :D
-struct telemetryMessage * telemetryArray[BUFFER_CAPACITY];
+
+esp_now_peer_info_t peerInfo;
+
+struct telemetryMessage currentTelemetry;
+telemetryMessage * telemetryArray;
 
 
-/*#################*/
-/* Function header */
-/*#################*/
-
-void setup();
-void loop();
-struct_message * readTelemetry();
-int * pushMessage();
-int * sendMessage();
-void sendMessages();
+#endif

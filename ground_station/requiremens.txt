@@ -1,0 +1,6 @@
+plotly
+dash
+jupyter-dash
+Numpy
+Pandas
+PySerial
