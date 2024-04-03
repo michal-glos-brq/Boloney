@@ -5,7 +5,7 @@
 
 // C8:F0:9E:9B:32:04 (not sure about this comment)
 #define MAC_ADDRESS_RCV {0xC8, 0xF0, 0x9E, 0x9B, 0x32, 0x04};
-#define MAC_ADDRESS_SND {0x24, 0x6F, 0x28, 0x25, 0xE4, 0x90};
+#define MAC_ADDRESS_SND {0x64, 0xE8, 0x33, 0x8A, 0xA7, 0xA0};
 
 typedef struct telemetryMessage {
     // Relative time will be kept, absolute time will be noted roughly
