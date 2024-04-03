@@ -1,17 +1,18 @@
-import sys
 import argparse
 import serial
 import re
 import logging
+from datetime import datetime
 
-import numpy as np
 import pandas as pd
-
-logging.info("I know it's weird, but it's recommended to run under superuser privilages.")
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('-d', '--device', type=str, required=True)
+parser.add_argument('-s', '--seconds', type=int, default=6, help='Set the time window for the plot in seconds')
+parser.add_argument('-p', '--pressure', type=float, default=1013.25, help='Set pressure according to current location')
 
 # Headers and datatypes for pandas dataframe
 header_raw = (r'^ID;Timestamp;GyroscopeX;GyroscopeY;GyroscopeZ;AccelerometerX;AccelerometerY;' \
@@ -24,8 +25,46 @@ headers = [
 
 datatypes = [int, int, float, float, float, float, float, float, int, float, float, float]
 
-def plot_latest_data(df):
-    print(df.iloc[-1])
+# Initialize the plot
+plt.ion()
+fig, axs = plt.subplots(3, 3, figsize=(16, 8))  # 3x3 subplot layout
+
+def plot_latest_data(df, window_size=10):
+    # Assuming 'Timestamp' is in seconds and sorted
+    latest_time = df['Timestamp'].max()
+    window_start_time = latest_time - window_size  # 10 seconds window
+
+    # Filter dataframe for the last 10 seconds
+    df_window = df[df['Timestamp'] > window_start_time]
+    
+    
+    # Clear previous plots
+    for ax in axs.flatten():
+        ax.clear()
+
+    # Plot data for each sensor on its own subplot
+    sensor_data = ['AccelerometerX', 'AccelerometerY', 'AccelerometerZ',
+                   'GyroscopeX', 'GyroscopeY', 'GyroscopeZ',
+                   'Voltage', 'Barometer', 'Thermometer']
+
+    for i, sensor in enumerate(sensor_data):
+        row = i // 3
+        col = i % 3
+        axs[row, col].plot(df_window['Timestamp'], df_window[sensor], label=sensor)
+        axs[row, col].set_title(sensor)
+        axs[row, col].grid(True)
+
+    # Formatting
+    for ax in axs[-1, :]:  # Set x-labels for the bottom row only
+        ax.set_xlabel('Time (s)')
+    for ax in axs[:, 0]:  # Set y-labels for the first column only
+        ax.set_ylabel('Value')
+    for ax in axs.flatten():
+        ax.legend()
+
+    fig.tight_layout()  # Adjust subplots to fit into the figure area
+    plt.draw()
+    plt.pause(0.001)  # Pause to allow the plot to update
 
 def dump_dataframe(df):
     '''Dump current content of dataframe to a file in PWD/LOG_timestamp_now.csv'''
@@ -43,6 +82,8 @@ def append_csv_row(row, df):
     '''Add CSV row to our current dataframe'''
     values = row.split(';')
     data = {header: dt(val) for header, dt, val in zip(headers, datatypes, values)}
+    # Normalize the timeticks
+    data['Timestamp'] = data['Timestamp'] / 1000000
     return pd.concat([df, init_dataframe(data=data)], ignore_index=True)
 
 def init_dataframe(data=None):
