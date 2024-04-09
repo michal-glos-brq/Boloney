@@ -163,9 +163,8 @@ void loop() {
   
   while (top > 0) {
     memcpy(&currentTelemetry, &(telemetryArray[--top]), sizeof(telemetryMessage));
-    err = sendMessage(&currentTelemetry);
+    sendMessage(&currentTelemetry);
   }  
   
   mtx_stack.unlock();
-  delay(1);
 }

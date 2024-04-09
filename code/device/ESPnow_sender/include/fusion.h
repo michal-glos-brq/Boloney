@@ -7,6 +7,8 @@
 #include <SD.h>
 #include <SPI.h>
 
+#include <MadgwickAHRS.h>
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -16,8 +18,10 @@
 
 #define DEBUG_SENSOR
 
+#define FULL_READING_PERIOD 250 // Gyro+Acc updates per full sensor reading
 
-#define PERIOD_SENSOR_READING 100 // Period for reading sensors in ms
+#define PERIOD_SENSOR_READING 2 // Period for reading sensors in ms
+#define SAMPLING_FREQUENCY 1000.0f/PERIOD_SENSOR_READING // Hz
 
 extern telemetryMessage currentTelemetry;
 extern uint64_t id_counter;
