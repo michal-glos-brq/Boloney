@@ -18,6 +18,9 @@ float angular_accelaration[3] = {0, 0, 0};
 float orientation[3] = {0, 0, 0};
 float angular_velocity[3] = {0, 0, 0};
 
+float acc_raw_bias[3] = {0, 0, 0};
+float gyro_raw_bias[3] = {0, 0, 0};
+
 Madgwick filter;
 
 uint64_t last_telemetry_timestamp;
@@ -31,26 +34,135 @@ int period_counter = 0;
 bool mpuReady = false;
 bool bmpReady = false;
 
+// Gyroscope Kalman Filters for each axis
+SimpleKalmanFilter gyroKalmanFilterX(0.03, 1, 0.01);
+SimpleKalmanFilter gyroKalmanFilterY(0.03, 1, 0.01);
+SimpleKalmanFilter gyroKalmanFilterZ(0.03, 1, 0.01);
+
+// Accelerometer Kalman Filters for each axis
+SimpleKalmanFilter accelKalmanFilterX(0.03, 1, 0.01);
+SimpleKalmanFilter accelKalmanFilterY(0.03, 1, 0.01);
+SimpleKalmanFilter accelKalmanFilterZ(0.03, 1, 0.01);
 
 
-float convertRawAcceleration(int aRaw) {
-  // since we are using 2G range
-  // -2g maps to a raw value of -32768
-  // +2g maps to a raw value of 32767
+SimpleKalmanFilter pressureKalmanFilter(1, 1, 0.01);
+
+
+const float accScale = 2.0 * 9.81 / 32768.0;
+const float gyroScale = 250.0 / 32768.0;
+
+
+void estimateMeasurementUncertainty(float * accel_var_x, float * accel_var_y, float * accel_var_z, float * gyro_var_x, float * gyro_var_y, float * gyro_var_z, float * baro_var) {
+
+  if ((!mpuReady) | (!bmpReady)) {
+    exit(1);
+  }
+
+  float accX_samples[CALIBRATION_PERIODS], accY_samples[CALIBRATION_PERIODS], accZ_samples[CALIBRATION_PERIODS];
+  float gyroX_samples[CALIBRATION_PERIODS], gyroY_samples[CALIBRATION_PERIODS], gyroZ_samples[CALIBRATION_PERIODS];
+  float baro_samples[CALIBRATION_PERIODS];
+
+  float acc_sums[3] = {0, 0, 0}, acc_means[3], acc_variances[3] = {0, 0, 0};
+  float gyro_sums[3] = {0, 0, 0}, gyro_means[3], gyro_variances[3] = {0, 0, 0};
+  float baro_sum = 0, baro_mean, baro_variance = 0;
+
+  // Collect samples
+  for (int i = 0; i < (int)CALIBRATION_PERIODS; i++) {
+
+    mpu.read();
+    data = mpu.getRawData();
+
+    accX_samples[i] = data.AcX;
+    accY_samples[i] = data.AcY;
+    accZ_samples[i] = data.AcZ;
+
+    gyroX_samples[i] = data.GyX;
+    gyroY_samples[i] = data.GyY;
+    gyroZ_samples[i] = data.GyZ;
+
+    if (bmp.takeForcedMeasurement()) {
+      baro_samples[i] = bmp.readPressure();
+    }
+
+    acc_sums[0] += accX_samples[i];
+    acc_sums[1] += accY_samples[i];
+    acc_sums[2] += accZ_samples[i];
+
+    gyro_sums[0] += gyroX_samples[i];
+    gyro_sums[1] += gyroY_samples[i];
+    gyro_sums[2] += gyroZ_samples[i];
+
+    baro_sum += baro_samples[i];
+
+    delay(CALIBRATION_DELAY);
+  }
+
+  acc_means[0] = acc_sums[0] / CALIBRATION_PERIODS;
+  acc_means[1] = acc_sums[1] / CALIBRATION_PERIODS;
+  acc_means[2] = acc_sums[2] / CALIBRATION_PERIODS;
+
+  gyro_means[0] = gyro_sums[0] / CALIBRATION_PERIODS;
+  gyro_means[1] = gyro_sums[1] / CALIBRATION_PERIODS;
+  gyro_means[2] = gyro_sums[2] / CALIBRATION_PERIODS;
+
+  baro_mean = baro_sum / CALIBRATION_PERIODS;
+
+  // Calculate variance
+  for (int i = 0; i < CALIBRATION_PERIODS; i++) {
+    acc_variances[0] += pow(accX_samples[i] - acc_means[0], 2);
+    acc_variances[1] += pow(accY_samples[i] - acc_means[1], 2);
+    acc_variances[2] += pow(accZ_samples[i] - acc_means[2], 2);
+
+    gyro_variances[0] += pow(gyroX_samples[i] - gyro_means[0], 2);
+    gyro_variances[1] += pow(gyroY_samples[i] - gyro_means[1], 2);
+    gyro_variances[2] += pow(gyroZ_samples[i] - gyro_means[2], 2);
+
+    baro_variance += pow(baro_samples[i] - baro_mean, 2);
+  }
   
-  float a = (aRaw * 2.0) / 32768.0;
-  return a;
+  acc_variances[0] /= CALIBRATION_PERIODS;
+  acc_variances[1] /= CALIBRATION_PERIODS;
+  acc_variances[2] /= CALIBRATION_PERIODS;
+
+  gyro_variances[0] /= CALIBRATION_PERIODS;
+  gyro_variances[1] /= CALIBRATION_PERIODS;
+  gyro_variances[2] /= CALIBRATION_PERIODS;
+
+  baro_variance /= CALIBRATION_PERIODS;
+
+  *accel_var_x = sqrt(acc_variances[0]);
+  *accel_var_y = sqrt(acc_variances[1]);
+  *accel_var_z = sqrt(acc_variances[2]);
+
+  *gyro_var_x = sqrt(gyro_variances[0]);
+  *gyro_var_y = sqrt(gyro_variances[1]);
+  *gyro_var_z = sqrt(gyro_variances[2]);
+
+  *baro_var = sqrt(baro_variance);
+
+  return;
 }
 
-float convertRawGyro(int gRaw) {
-  // since we are using 250 degrees/seconds range
-  // -250 maps to a raw value of -32768
-  // +250 maps to a raw value of 32767
-  
-  float g = (gRaw * 250.0) / 32768.0;
-  return g;
-}
+void setup_kellmans() {
+  float accel_var_x, accel_var_y, accel_var_z;
+  float gyro_var_x, gyro_var_y, gyro_var_z;
+  float baro_var;
 
+  estimateMeasurementUncertainty(&accel_var_x, &accel_var_y, &accel_var_z, &gyro_var_x, &gyro_var_y, &gyro_var_z, &baro_var);
+
+  // Initialize Kalman filters
+  accelKalmanFilterX.setProcessNoise(accel_var_x);
+  accelKalmanFilterY.setProcessNoise(accel_var_y);
+  accelKalmanFilterZ.setProcessNoise(accel_var_z);
+
+  gyroKalmanFilterX.setProcessNoise(gyro_var_x);
+  gyroKalmanFilterY.setProcessNoise(gyro_var_y);
+  gyroKalmanFilterZ.setProcessNoise(gyro_var_z);
+
+  pressureKalmanFilter.setProcessNoise(baro_var);
+
+  return;
+}
 
 void setupSensors() {
   Wire.begin(8, 10); // SDA, SCL
@@ -92,11 +204,12 @@ void setupSensors() {
 void sensorTask(void * args) {
 
   SemaphoreHandle_t mtx_sensor_acc = (SemaphoreHandle_t) args;
-
+  TickType_t xLastWakeTime;
+  const TickType_t xFrequency = PERIOD_SENSOR_READING;
   filter.begin(SAMPLING_FREQUENCY);
 
   while (1) {
-
+    xLastWakeTime = xTaskGetTickCount();
     period_counter++;    
     last_telemetry_timestamp = micros();
     //xSemaphoreTake(mtx_sensor_acc, portMAX_DELAY);
@@ -112,19 +225,63 @@ void sensorTask(void * args) {
 
       dynamicTelemetry.relativeTime = last_telemetry_timestamp;
 
-      angular_accelaration[0] = convertRawGyro(data.GyX);
-      angular_accelaration[1] = convertRawGyro(data.GyY);
-      angular_accelaration[2] = convertRawGyro(data.GyZ);
-      acceleration[0] = convertRawAcceleration(data.AcX);
-      acceleration[1] = convertRawAcceleration(data.AcY);
-      acceleration[2] = convertRawAcceleration(data.AcZ);
+      angular_accelaration[0] = gyroKalmanFilterX.updateEstimate(data.GyX)*gyroScale;
+      angular_accelaration[1] = gyroKalmanFilterY.updateEstimate(data.GyY)*gyroScale;
+      angular_accelaration[2] = gyroKalmanFilterZ.updateEstimate(data.GyZ)*gyroScale;
+
+      acceleration[0] = accelKalmanFilterX.updateEstimate(data.AcX)*accScale;
+      acceleration[1] = accelKalmanFilterY.updateEstimate(data.AcY)*accScale;
+      acceleration[2] = accelKalmanFilterZ.updateEstimate(data.AcZ)*accScale;
 
       filter.updateIMU(angular_accelaration[0], angular_accelaration[1], angular_accelaration[2],
                     acceleration[0], acceleration[1], acceleration[2]);
 
+      // Integrate acceleration to update velocity
+      velocity[0] += acceleration[0] * PERIOD_SENSOR_READING_S;
+      velocity[1] += acceleration[1] * PERIOD_SENSOR_READING_S;
+      velocity[2] += acceleration[2] * PERIOD_SENSOR_READING_S;
+
+      position[0] += velocity[0] * PERIOD_SENSOR_READING_S;
+      position[1] += velocity[1] * PERIOD_SENSOR_READING_S;
+      position[2] += velocity[2] * PERIOD_SENSOR_READING_S;
+
+      dynamicTelemetry.velocity[0] = velocity[0];
+      dynamicTelemetry.velocity[1] = velocity[1];
+      dynamicTelemetry.velocity[2] = velocity[2];
+
+      dynamicTelemetry.position[0] = position[0];
+      dynamicTelemetry.position[1] = position[1];
+      dynamicTelemetry.position[2] = position[2];
+
+      dynamicTelemetry.angularVelocity[0] = angular_accelaration[0];
+      dynamicTelemetry.angularVelocity[1] = angular_accelaration[1];
+      dynamicTelemetry.angularVelocity[2] = angular_accelaration[2];
+
       dynamicTelemetry.orientation[0] = filter.getPitch();
       dynamicTelemetry.orientation[1] = filter.getYaw();
       dynamicTelemetry.orientation[2] = filter.getRoll();
+
+      #ifdef DEBUG_TELEMETRY
+      Serial.print("PosX: ");
+      Serial.print(dynamicTelemetry.position[0]);
+      Serial.print(" PosY: ");
+      Serial.print(dynamicTelemetry.position[1]);
+      Serial.print(" PosZ: ");
+      Serial.print(dynamicTelemetry.position[2]);
+      Serial.print(" VelX: ");
+      Serial.print(velocity[0]);
+      Serial.print(" VelY: ");
+      Serial.print(velocity[1]);
+      Serial.print(" VelZ: ");
+      Serial.print(velocity[2]);
+
+      Serial.print("Pitch: ");
+      Serial.print(dynamicTelemetry.orientation[0]);
+      Serial.print(" Yaw: ");
+      Serial.print(dynamicTelemetry.orientation[1]);
+      Serial.print(" Roll: ");
+      Serial.println(dynamicTelemetry.orientation[2]);
+      #endif
 
     }
     
@@ -134,7 +291,7 @@ void sensorTask(void * args) {
         if (bmp.takeForcedMeasurement()) {
           // can now print out the new measurements
           dynamicTelemetry.thermometer = bmp.readTemperature();
-          dynamicTelemetry.barometer = bmp.readPressure();
+          dynamicTelemetry.barometer =  pressureKalmanFilter.updateEstimate(bmp.readPressure());
         }
         else {
           dynamicTelemetry.thermometer = 0;
@@ -157,7 +314,7 @@ void sensorTask(void * args) {
       Serial.println(uxHighWaterMark);
       #endif
     }
-    vTaskDelay(PERIOD_SENSOR_READING);  
+    xTaskDelayUntil(&xLastWakeTime, xFrequency);
   }
 }
 

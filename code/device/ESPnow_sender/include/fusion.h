@@ -8,6 +8,7 @@
 #include <SPI.h>
 
 #include <MadgwickAHRS.h>
+#include <SimpleKalmanFilter.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -16,11 +17,18 @@
 #include "telemetry.h"
 
 
-#define DEBUG_SENSOR
+#define CALIBRATION_PERIODS 100
+#define CALIBRATION_DELAY pdMS_TO_TICKS(10) // RTOS delay in ticks, 100 ms for example
+
+
+// #define DEBUG_SENSOR
+
+// #define DEBUG_TELEMETRY
 
 #define FULL_READING_PERIOD 250 // Gyro+Acc updates per full sensor reading
 
-#define PERIOD_SENSOR_READING 2 // Period for reading sensors in ms
+#define PERIOD_SENSOR_READING 10 // Period for reading sensors in ms
+#define PERIOD_SENSOR_READING_S 0.01 // Period in seconds
 #define SAMPLING_FREQUENCY 1000.0f/PERIOD_SENSOR_READING // Hz
 
 extern telemetryMessage currentTelemetry;

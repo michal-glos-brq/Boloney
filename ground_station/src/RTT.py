@@ -1,22 +1,36 @@
 #! /usr/bin/env python3
 
-import argparse
-import serial
 import re
-
+import serial
+import argparse
+from datetime import datetime
 from multiprocessing import Process, Queue
 
-import logging
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('matplotlib').setLevel(logging.WARNING)
-
-from datetime import datetime
 import pandas as pd
 
 import plotter
 
 
-MAX_MSGS_PER_UPDATE = 1
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
+
+HEADER = 69
+
+# # DataFrame setup
+headers = ["ID", "Timestamp",
+           "OrientationX", "OrientationY", "OrientationZ",
+           "AngularVelocityX", "AngularVelocityY", "AngularVelocityZ",
+           "PositionX", "PositionY", "PositionZ",
+           "VelocityX", "VelocityY", "VelocityZ",
+           "Barometer", "Thermometer", "ThermometerStupido", "Voltage"]
+header_pattern = re.compile(r'^New session started!$')
+# Pandas is not great at guessing datatypes, let's define those explicitly
+datatypes = [int, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float]
+
+
+MAX_MSGS_PER_UPDATE = 2
 
 
 # Setup the argument parser
@@ -43,26 +57,29 @@ def reading_process(queue):
                 line += char  # Accumulate the character into the line
 
             # Strip and process to plot
-            line = line.strip()
+            _line = line.strip()
             # If header was read, alert other process
-            if bool(re.match(plotter.header_pattern, line)):
+            if bool(re.match(header_pattern, _line)):
                 logging.warning("Header received!")
                 activated = True
-                queue.put(plotter.HEADER)
+                queue.put(HEADER)
+                
             # If line was read, put it into queue
-            elif bool(re.match(r'^-?\d+(\.\d+)?(;-?\d+(\.\d+)?)*$', line)) and activated:
+            elif bool(re.match(r'^(-?\d+(\.\d+)?;)*-?\d+(\.\d+)?$', _line)) and activated:
                 msg_counter += 1
-                values = line.split(';')
-                data = {header: dt(val) for header, dt, val in zip(plotter.headers, plotter.datatypes, values)}
+                values = _line.split(';')
+                data = {header: dt(val) for header, dt, val in zip(headers, datatypes, values)}
                 data['Timestamp'] = data['Timestamp'] / 1000000.
                 queue.put(data)
                 logging.info(f"Message rcv: {data['ID']}")
+                logging.debug(f"Message rcv: {data}")
                 # Just make sure the stream gets disrupted so it could be plotted
                 if msg_counter >= MAX_MSGS_PER_UPDATE:
                     msg_counter = 0
                     queue.put(None)
+                    logging.debug("Queue updated")
             else: 
-                logging.debug("Unrecognized line: %s", line)
+                logging.debug("Unrecognized line: %s", _line)
 
         except UnicodeDecodeError:
             # This means restart - initial message could not be decoded in UTF8
@@ -77,6 +94,7 @@ def reading_process(queue):
 def plotting_process(queue):
     '''Read from queue and make plots'''
     activated = False
+    plot_full = True
     while True:
         new_data = False
         # Read the whole queue
@@ -91,12 +109,12 @@ def plotting_process(queue):
         for dato in data:
             if dato is None:
                 continue
-            if dato == plotter.HEADER:
+            if dato == HEADER:
                 # If activated before, save CSV
                 if activated:
                     df.to_csv(f'./CSV/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.csv', index=False)
                 # Activate and create new DF
-                df = pd.DataFrame(columns=plotter.headers)
+                df = pd.DataFrame(columns=headers)
                 activated = True
                 continue
             else:
@@ -104,18 +122,20 @@ def plotting_process(queue):
                 new_data = True
         
         if new_data:        
-            plotter.plot_latest_data(df, args.seconds)
+            plotter.plot_latest_data(df, args.seconds, partial_render=plot_full)
+            plot_full = False
         
 
 
 if __name__ == "__main__":
     # Parse the CLI parameters
     args = parser.parse_args()
- 
+    
+    
     # Connect to the ground station
     ser = serial.Serial(args.device, 115200, timeout=1)
     # Initialize DataFrame
-    df = pd.DataFrame(columns=plotter.headers)
+    df = pd.DataFrame(columns=headers)
 
     queue = Queue()
     

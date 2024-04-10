@@ -7,6 +7,7 @@
 
 uint8_t broadcastAddress[] = MAC_ADDRESS_SND;
 int top = -1;
+bool activated = false;
 
 std::mutex mtx_stack;
 
@@ -41,9 +42,15 @@ void print_entry(telemetryMessage *msg)
                    String(msg->orientation[0]) + ";" +
                    String(msg->orientation[1]) + ";" +
                    String(msg->orientation[2]) + ";" +
+                   String(msg->angularVelocity[0]) + ";" +
+                   String(msg->angularVelocity[1]) + ";" +
+                   String(msg->angularVelocity[2]) + ";" +
                    String(msg->position[0]) + ";" +
                    String(msg->position[1]) + ";" +
                    String(msg->position[2]) + ";" +
+                   String(msg->velocity[0]) + ";" +
+                   String(msg->velocity[1]) + ";" +
+                   String(msg->velocity[2]) + ";" +
                    String(msg->barometer) + ";" +
                    String(msg->thermometer) + ";" +
                    String(msg->thermometer_stupido) + ";" +
@@ -86,18 +93,9 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 
 void SendHeader()
 {
-  Serial.print("ID;");
-  Serial.print("Timestamp;");
-  Serial.print("OrientationX;");
-  Serial.print("OrientationY;");
-  Serial.print("OrientationZ;");
-  Serial.print("PositionX;");
-  Serial.print("PositionY;");
-  Serial.print("PositionZ;");
-  Serial.print("Barometer;");
-  Serial.print("Thermometer;");
-  Serial.print("ThermometerStupido;");
-  Serial.println("Voltage");
+  Serial.println("####################");
+  Serial.println("New session started!");
+  Serial.println("####################");
 }
 
 
@@ -131,7 +129,8 @@ void setupComms() {
     Serial.println("Failed to add peer");
     return (void)1;
   }
-
+  delay(333);
+  activated = true;
 }
 
 void setup()
@@ -157,6 +156,9 @@ void setup()
 
 // Intentionally empty
 void loop() {
+
+  // Wait till activated
+  while (!activated) {delay(100);};
 
   esp_err_t err;
   mtx_stack.lock();

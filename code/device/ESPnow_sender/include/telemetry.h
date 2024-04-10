@@ -8,8 +8,10 @@ typedef struct telemetryMessage {
     uint64_t relativeTime;
     uint64_t id;
     int valid;
-    double orientation[3];
-    double position[3];
+    float orientation[3];
+    float angularVelocity[3];
+    float position[3];
+    float velocity[3];
     int barometer;
     float thermometer;
     float thermometer_stupido;
