@@ -51,6 +51,38 @@ SimpleKalmanFilter pressureKalmanFilter(1, 1, 0.01);
 const float accScale = 2.0 * 9.81 / 32768.0;
 const float gyroScale = 250.0 / 32768.0;
 
+void applyRotationMatrix(float *acc, float * orientation) {
+    // Convert angles from degrees to radians
+    float pitchRad = orientation[0] * M_PI / 180.0;
+    float yawRad = orientation[1] * M_PI / 180.0;
+    float rollRad = orientation[2] * M_PI / 180.0;
+
+    // Pre-calculate sine and cosine of the angles
+    float sinPitch = sin(pitchRad), cosPitch = cos(pitchRad);
+    float sinYaw = sin(yawRad), cosYaw = cos(yawRad);
+    float sinRoll = sin(rollRad), cosRoll = cos(rollRad);
+
+    // Calculate the rotation matrix components
+    float R11 = cosYaw * cosPitch;
+    float R12 = cosYaw * sinPitch * sinRoll - sinYaw * cosRoll;
+    float R13 = cosYaw * sinPitch * cosRoll + sinYaw * sinRoll;
+    float R21 = sinYaw * cosPitch;
+    float R22 = sinYaw * sinPitch * sinRoll + cosYaw * cosRoll;
+    float R23 = sinYaw * sinPitch * cosRoll - cosYaw * sinRoll;
+    float R31 = -sinPitch;
+    float R32 = cosPitch * sinRoll;
+    float R33 = cosPitch * cosRoll;
+
+    // Apply the rotation matrix to the acceleration vector
+    float accX_new = R11 * acc[0] + R12 * acc[1] + R13 * acc[2];
+    float accY_new = R21 * acc[0] + R22 * acc[1] + R23 * acc[2];
+    float accZ_new = R31 * acc[0] + R32 * acc[1] + R33 * acc[2];
+
+    // Update the original acceleration vector
+    acc[0] = accX_new;
+    acc[1] = accY_new;
+    acc[2] = accZ_new;
+}
 
 void estimateMeasurementUncertainty(float * accel_var_x, float * accel_var_y, float * accel_var_z, float * gyro_var_x, float * gyro_var_y, float * gyro_var_z, float * baro_var) {
 
@@ -200,7 +232,6 @@ void setupSensors() {
   dynamicTelemetry.valid = 1;
 }
 
-
 void sensorTask(void * args) {
 
   SemaphoreHandle_t mtx_sensor_acc = (SemaphoreHandle_t) args;
@@ -236,6 +267,13 @@ void sensorTask(void * args) {
       filter.updateIMU(angular_accelaration[0], angular_accelaration[1], angular_accelaration[2],
                     acceleration[0], acceleration[1], acceleration[2]);
 
+
+      dynamicTelemetry.orientation[0] = filter.getPitch();
+      dynamicTelemetry.orientation[1] = filter.getYaw();
+      dynamicTelemetry.orientation[2] = filter.getRoll();
+
+      applyRotationMatrix(acceleration, dynamicTelemetry.orientation);
+
       // Integrate acceleration to update velocity
       velocity[0] += acceleration[0] * PERIOD_SENSOR_READING_S;
       velocity[1] += acceleration[1] * PERIOD_SENSOR_READING_S;
@@ -257,9 +295,7 @@ void sensorTask(void * args) {
       dynamicTelemetry.angularVelocity[1] = angular_accelaration[1];
       dynamicTelemetry.angularVelocity[2] = angular_accelaration[2];
 
-      dynamicTelemetry.orientation[0] = filter.getPitch();
-      dynamicTelemetry.orientation[1] = filter.getYaw();
-      dynamicTelemetry.orientation[2] = filter.getRoll();
+
 
       #ifdef DEBUG_TELEMETRY
       Serial.print("PosX: ");

@@ -5,6 +5,9 @@ import serial
 import argparse
 from datetime import datetime
 from multiprocessing import Process, Queue
+# To print out the traceback in case of an exception
+import traceback
+
 
 import pandas as pd
 
@@ -30,7 +33,7 @@ header_pattern = re.compile(r'^New session started!$')
 datatypes = [int, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float]
 
 
-MAX_MSGS_PER_UPDATE = 2
+MAX_MSGS_PER_UPDATE = 1
 
 
 # Setup the argument parser
@@ -91,10 +94,9 @@ def reading_process(queue):
         except Exception as e:
             logging.error("Unexpected error processing line: %s", repr(e))
 
-def plotting_process(queue):
+def plotting_process(queue, ref_pressure):
     '''Read from queue and make plots'''
     activated = False
-    plot_full = True
     while True:
         new_data = False
         # Read the whole queue
@@ -122,15 +124,12 @@ def plotting_process(queue):
                 new_data = True
         
         if new_data:        
-            plotter.plot_latest_data(df, args.seconds, partial_render=plot_full)
-            plot_full = False
-        
+            plotter.plot_latest_data(df, args.seconds, ref_pressure=ref_pressure)
 
 
 if __name__ == "__main__":
     # Parse the CLI parameters
     args = parser.parse_args()
-    
     
     # Connect to the ground station
     ser = serial.Serial(args.device, 115200, timeout=1)
@@ -143,8 +142,17 @@ if __name__ == "__main__":
     reader.start()
     
     # This is done in main thread
-    plotting_process(queue)
-
-    reader.join()
+    try:
+        plotting_process(queue, ref_pressure=args.pressure)
+    except Exception as e:
+        # Plot the whole traceback
+        logging.error("Unexpected error: %s", repr(e))
+        logging.error("Traceback: %s", traceback.format_exc())
+        
+    finally:
+        ser.close()
+        reader.terminate()
+        reader.join()
+        logging.info("Exiting...")
  
     
