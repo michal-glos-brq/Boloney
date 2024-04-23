@@ -12,6 +12,7 @@ typedef struct telemetryMessage {
     float angularVelocity[3];
     float position[3];
     float velocity[3];
+    float acceleration[3];
     int barometer;
     float thermometer;
     float thermometer_stupido;

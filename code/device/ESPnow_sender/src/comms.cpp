@@ -2,7 +2,6 @@
 
 
 esp_now_peer_info_t peerInfo;
-struct SemaphoresComms semaphores;
 
 // Comms data structure holders
 telemetryMessage * telemetryArray;
@@ -23,14 +22,12 @@ void saveMessage() {
     Serial.println("Warning! Message not confirmed - saving into buffer");
     #endif
 
-    //xSemaphoreTake(semaphores.mtx_stack, portMAX_DELAY);
 
     for (int i = 0; i < BUFFER_CAPACITY; i++) {
       
       if (telemetryArray[i].valid == 0) {
         // Copy currentTelemetry to the telemetry array at I place with memcpy
         memcpy(&telemetryArray[i], &currentTelemetry, sizeof(telemetryMessage));
-        //xSemaphoreGive(semaphores.mtx_stack);
         return;
       }
     }
@@ -49,13 +46,15 @@ void saveMessage() {
       }
     }
     memcpy(&telemetryArray[tmpIndex], &currentTelemetry, sizeof(telemetryMessage));
-    //xSemaphoreGive(semaphores.mtx_stack);
     return;
   }
  }
 
 // This sends a sinlge message
 esp_err_t sendMessage(telemetryMessage * message){
+  #ifdef DEBUG_MSG
+  Serial.print("Sending message: ");Serial.print(message->id);Serial.print(" time: ");Serial.print(message->relativeTime);Serial.print(" acc: ");Serial.print(message->acceleration[0]);Serial.print(", ");Serial.print(message->acceleration[1]);Serial.print(", ");Serial.print(message->acceleration[2]);Serial.print(" pos: ");Serial.print(message->position[0]);Serial.print(", ");Serial.print(message->position[1]);Serial.print(", ");Serial.print(message->position[2]);Serial.print(" vel: ");Serial.print(message->velocity[0]);Serial.print(", ");Serial.print(message->velocity[1]);Serial.print(", ");Serial.print(message->velocity[2]);Serial.print(" ang: ");Serial.print(message->angularVelocity[0]);Serial.print(", ");Serial.print(message->angularVelocity[1]);Serial.print(", ");Serial.print(message->angularVelocity[2]);Serial.print(" ori: ");Serial.print(message->orientation[0]);Serial.print(", ");Serial.print(message->orientation[1]);Serial.print(", ");Serial.print(message->orientation[2]);Serial.print(" bar: ");Serial.print(message->barometer);Serial.print(" temp: ");Serial.print(message->thermometer);Serial.print(" temp2: ");Serial.print(message->thermometer_stupido);Serial.print(" volt: ");Serial.println(message->voltage);
+  #endif
   return esp_now_send(broadcastAddress, (uint8_t *) message, sizeof(telemetryMessage));
 }
 
@@ -66,7 +65,7 @@ void sendMessages() {
   #endif
   
   //xSemaphoreTake(semaphores.mtx_stack, portMAX_DELAY);
-  for (int i = 0; i < BUFFER_CAPACITY; i++) {
+  for (int i = BUFFER_CAPACITY; i >= 0; i--) {
     if (telemetryArray[i].valid == 1) {
       sendMessage(&telemetryArray[i]);
       #ifdef DEBUG_COMMS
@@ -79,7 +78,6 @@ void sendMessages() {
       break;
     }
   }
-  //xSemaphoreGive(semaphores.mtx_stack);
 
   #ifdef DEBUG_COMMS
   Serial.println("FInished sendMessages ...");
@@ -96,14 +94,12 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   last_ack_received = micros();
   telemetryMessage * message = (telemetryMessage *) incomingData;
 
-  // xSemaphoreTake(semaphores.mtx_stack, portMAX_DELAY);
   if (currentTelemetry.id == message->id) {
     #ifdef DEBUG_COMMS
     Serial.print("Ack for last message: ");
     Serial.println(currentTelemetry.id);
     #endif
     currentTelemetry.valid = 0;
-    //xSemaphoreGive(semaphores.mtx_stack);
     return;
   }
   else {
@@ -120,14 +116,12 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       }
     }
   }
-  //xSemaphoreGive(semaphores.mtx_stack);
 }
 
 
 
 void commsTask(void * args) {
 
-    semaphores = * (SemaphoresComms *) args;
 
   while (1) {
     current_comms_cycle_start = micros();
@@ -166,7 +160,7 @@ void commsTask(void * args) {
     }
 
     // Try to send current telemetry
-    readTelemetry(semaphores.mtx_sensor_acc, semaphores.mtx_stack);
+    readTelemetry();
 
     esp_now_peer_info();  
     esp_err_t succ = sendMessage(&currentTelemetry);

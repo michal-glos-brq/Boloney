@@ -2,8 +2,8 @@
 #define COMMS_H
 
 
-#define DEBUG_COMMS
-
+// #define DEBUG_COMMS
+// #define DEBUG_MSG
 
 #include <esp_now.h>
 #include <WiFi.h>
@@ -22,12 +22,6 @@
 #define MIN_SILENT_TIME_US MIN_SILENT_TIME * 1000 // minimal time to be silent for each cycle, in us 
 
 #define CONNECTION_TIMEOUT 10000 // TImeout to stop sending messages ("stack" dumps)
-
-// This is how we pass 2 semaphores into this RTOS task
-typedef struct SemaphoresComms {
-    SemaphoreHandle_t mtx_stack;
-    SemaphoreHandle_t mtx_sensor_acc;
-} semaphoresComms;
 
 
 void saveMessage();

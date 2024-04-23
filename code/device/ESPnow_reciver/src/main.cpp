@@ -51,6 +51,9 @@ void print_entry(telemetryMessage *msg)
                    String(msg->velocity[0]) + ";" +
                    String(msg->velocity[1]) + ";" +
                    String(msg->velocity[2]) + ";" +
+                   String(msg->acceleration[0]) + ";" +
+                   String(msg->acceleration[1]) + ";" +
+                   String(msg->acceleration[2]) + ";" +
                    String(msg->barometer) + ";" +
                    String(msg->thermometer) + ";" +
                    String(msg->thermometer_stupido) + ";" +

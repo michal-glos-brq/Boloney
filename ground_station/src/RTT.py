@@ -27,28 +27,26 @@ headers = ["ID", "Timestamp",
            "AngularVelocityX", "AngularVelocityY", "AngularVelocityZ",
            "PositionX", "PositionY", "PositionZ",
            "VelocityX", "VelocityY", "VelocityZ",
+           "AccelerationX", "AccelerationY", "AccelerationZ",
            "Barometer", "Thermometer", "ThermometerStupido", "Voltage"]
 header_pattern = re.compile(r'^New session started!$')
 # Pandas is not great at guessing datatypes, let's define those explicitly
-datatypes = [int, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float]
+datatypes = [int] + [float] * 20
 
-
-MAX_MSGS_PER_UPDATE = 1
 
 
 # Setup the argument parser
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--device', type=str, required=True)
 parser.add_argument('-s', '--seconds', type=int, default=10, help='Set the time window for the plot in seconds')
-parser.add_argument('-p', '--pressure', type=float, default=1013.25, help='Set pressure according to current location')
+parser.add_argument('-p', '--pressure', type=float, default=101325, help='Set pressure according to current location')
+parser.add_argument('-r', '--raw', action='store_true', help="Visalize RAW obtained data")
 
 
 def reading_process(queue):
     '''Read serial port and give the lines and headers into Queue'''
     activated = False
-    
-    msg_counter = 0
-    
+        
     while True:
         try:
             # Read a single line
@@ -69,18 +67,12 @@ def reading_process(queue):
                 
             # If line was read, put it into queue
             elif bool(re.match(r'^(-?\d+(\.\d+)?;)*-?\d+(\.\d+)?$', _line)) and activated:
-                msg_counter += 1
                 values = _line.split(';')
                 data = {header: dt(val) for header, dt, val in zip(headers, datatypes, values)}
                 data['Timestamp'] = data['Timestamp'] / 1000000.
                 queue.put(data)
                 logging.info(f"Message rcv: {data['ID']}")
                 logging.debug(f"Message rcv: {data}")
-                # Just make sure the stream gets disrupted so it could be plotted
-                if msg_counter >= MAX_MSGS_PER_UPDATE:
-                    msg_counter = 0
-                    queue.put(None)
-                    logging.debug("Queue updated")
             else: 
                 logging.debug("Unrecognized line: %s", _line)
 
@@ -88,13 +80,17 @@ def reading_process(queue):
             # This means restart - initial message could not be decoded in UTF8
             queue.put(None)
         except serial.SerialException as e:
-            logging.info("Exiting...")
-            ser.close()
-            exit()
+            # I am nor really sure when this happens ... but let's ignore it for now, it catches up ventually
+            #logging.info("Exiting...")
+            logging.warning("Serial exception: %s", repr(e))
+            # And print the trace ...
+            logging.error("Traceback: %s", traceback.format_exc())
+            #ser.close()
+            #exit()
         except Exception as e:
             logging.error("Unexpected error processing line: %s", repr(e))
 
-def plotting_process(queue, ref_pressure):
+def plotting_process(queue, axs, fig, ref_pressure, raw=False):
     '''Read from queue and make plots'''
     activated = False
     while True:
@@ -102,9 +98,9 @@ def plotting_process(queue, ref_pressure):
         # Read the whole queue
         data = []
         while True:
-            dato = queue.get()
-            if dato is None:
+            if not queue.qsize():
                 break
+            dato = queue.get()
             data.append(dato)
         
         
@@ -123,13 +119,18 @@ def plotting_process(queue, ref_pressure):
                 df.loc[len(df)] = dato
                 new_data = True
         
-        if new_data:        
-            plotter.plot_latest_data(df, args.seconds, ref_pressure=ref_pressure)
+        if new_data:
+            if raw:
+                plotter.plot_all_data(df, axs, fig, args.seconds)
+            else:
+                plotter.plot_latest_data(df, axs, fig, args.seconds, ref_pressure=ref_pressure)
 
 
 if __name__ == "__main__":
     # Parse the CLI parameters
     args = parser.parse_args()
+    
+    fig, axs = plotter.init_plots(args.raw)
     
     # Connect to the ground station
     ser = serial.Serial(args.device, 115200, timeout=1)
@@ -143,7 +144,7 @@ if __name__ == "__main__":
     
     # This is done in main thread
     try:
-        plotting_process(queue, ref_pressure=args.pressure)
+        plotting_process(queue, axs, fig, ref_pressure=args.pressure, raw=args.raw)
     except Exception as e:
         # Plot the whole traceback
         logging.error("Unexpected error: %s", repr(e))
